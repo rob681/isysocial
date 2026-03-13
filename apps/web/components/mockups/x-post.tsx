@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { MessageCircle, Repeat2, Heart, BarChart3, Share, Bookmark, MoreHorizontal } from "lucide-react";
+import { MessageCircle, Repeat2, Heart, BarChart3, Share, Bookmark, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MockupProps } from "./types";
 
 export function XPostMockup({
@@ -13,10 +14,13 @@ export function XPostMockup({
   scheduledAt,
   className,
 }: MockupProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   const displayCopy = copy || "Escribe el contenido del post...";
   const fullText = hashtags ? `${displayCopy}\n\n${hashtags}` : displayCopy;
   const hasMedia = media && media.length > 0;
-  const firstMedia = hasMedia ? media[0] : null;
+  const currentMedia = hasMedia ? media[currentIndex] : null;
+  const isCarousel = media && media.length > 1;
   const handle = `@${clientName.toLowerCase().replace(/\s/g, "")}`;
   const timeAgo = scheduledAt
     ? scheduledAt.toLocaleDateString("es", { day: "numeric", month: "short" })
@@ -63,21 +67,44 @@ export function XPostMockup({
           </p>
 
           {/* Media */}
-          {firstMedia && (
-            <div className="mt-3 rounded-2xl overflow-hidden border">
-              {firstMedia.type === "video" ? (
+          {currentMedia ? (
+            <div className="relative mt-3 rounded-2xl overflow-hidden border">
+              {currentMedia.type === "video" ? (
                 <div className="w-full aspect-video bg-zinc-900 flex items-center justify-center">
                   <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
                     <div className="w-0 h-0 border-l-[18px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1" />
                   </div>
                 </div>
               ) : (
-                <img src={firstMedia.url} alt="" className="w-full aspect-video object-cover" />
+                <img src={currentMedia.url} alt="" className="w-full aspect-video object-cover" />
+              )}
+
+              {/* Carousel indicator badge */}
+              {isCarousel && (
+                <div className="absolute top-3 right-3 bg-zinc-800/70 text-white text-xs font-medium px-2 py-1 rounded-full">
+                  {currentIndex + 1}/{media!.length}
+                </div>
+              )}
+
+              {/* Carousel navigation */}
+              {isCarousel && currentIndex > 0 && (
+                <button
+                  onClick={() => setCurrentIndex((i) => i - 1)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 dark:bg-zinc-800/80 shadow-md flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4 text-zinc-700 dark:text-zinc-200" />
+                </button>
+              )}
+              {isCarousel && currentIndex < media!.length - 1 && (
+                <button
+                  onClick={() => setCurrentIndex((i) => i + 1)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 dark:bg-zinc-800/80 shadow-md flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4 text-zinc-700 dark:text-zinc-200" />
+                </button>
               )}
             </div>
-          )}
-
-          {!hasMedia && (
+          ) : (
             <div className="mt-3 rounded-2xl overflow-hidden border aspect-video bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
               <div className="text-zinc-300 dark:text-zinc-600 text-center">
                 <div className="w-10 h-10 mx-auto mb-1 rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-600 flex items-center justify-center">
@@ -85,6 +112,22 @@ export function XPostMockup({
                 </div>
                 <p className="text-xs">Agrega media</p>
               </div>
+            </div>
+          )}
+
+          {/* Carousel dots */}
+          {isCarousel && (
+            <div className="flex justify-center gap-1 py-2">
+              {media!.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentIndex(i)}
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full transition-colors",
+                    i === currentIndex ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"
+                  )}
+                />
+              ))}
             </div>
           )}
 

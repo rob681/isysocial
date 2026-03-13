@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -17,8 +18,13 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
 
   const {
     register,
@@ -44,7 +50,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/admin");
+    // Let middleware handle role-based redirect (ADMIN→/admin, EDITOR→/editor, CLIENTE→/cliente)
+    router.push("/");
     router.refresh();
   };
 
@@ -60,7 +67,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-3">
             <img
-              src="/logo-full-normal.svg"
+              src={isDark ? "/logo-full-white.svg" : "/logo-full-normal.svg"}
               alt="Isysocial"
               className="h-16 w-auto"
             />
