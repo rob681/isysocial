@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "isysocial-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@isysocial/web", "dev"],
+      "port": 3001
+    }
+  ]
+}

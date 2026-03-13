@@ -1,0 +1,591 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
+  output          = "../../../apps/web/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["isysocial"]
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  CLIENTE
+  SOPORTE
+  FACTURACION
+
+  @@schema("isysocial")
+}
+
+enum TokenType {
+  INVITATION
+  PASSWORD_RESET
+
+  @@schema("isysocial")
+}
+
+enum NotificationType {
+  POST_SUBMITTED_FOR_REVIEW
+  POST_APPROVED
+  POST_CHANGES_REQUESTED
+  POST_REVISION_LIMIT_REACHED
+  NEW_POST_COMMENT
+  NEW_IDEA_COMMENT
+  POST_SCHEDULED
+  IDEA_CONVERTED_TO_POST
+
+  @@schema("isysocial")
+}
+
+enum SocialNetwork {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  TIKTOK
+  X
+
+  @@schema("isysocial")
+}
+
+enum PostType {
+  IMAGE
+  CAROUSEL
+  STORY
+  REEL
+  VIDEO
+  TEXT
+
+  @@schema("isysocial")
+}
+
+enum PostStatus {
+  DRAFT
+  IN_REVIEW
+  CLIENT_CHANGES
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  PAUSED
+  CANCELLED
+
+  @@schema("isysocial")
+}
+
+enum IdeaStatus {
+  BACKLOG
+  IN_PROGRESS
+  READY
+  CONVERTED
+  DISCARDED
+
+  @@schema("isysocial")
+}
+
+enum PublishStatus {
+  PENDING
+  SUCCESS
+  FAILED
+
+  @@schema("isysocial")
+}
+
+// ─── AGENCY (multi-tenant) ────────────────────────────────────────────────────
+
+model Agency {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  logoUrl      String?
+  logoDarkUrl  String?
+  primaryColor String?   @default("#2563eb")
+  accentColor  String?
+  maxClients   Int       @default(20)
+  maxEditors   Int       @default(10)
+  planTier     String    @default("trial")
+  trialEndsAt  DateTime?
+  timezone     String    @default("America/Mexico_City")
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  users        User[]
+  clients      ClientProfile[]
+  clientGroups ClientGroup[]
+  posts        Post[]
+  ideas        Idea[]
+  categories   PostCategory[]
+  templates    PostTemplate[]
+
+  @@schema("isysocial")
+  @@map("iso_agencies")
+}
+
+// ─── CLIENT GROUPS ────────────────────────────────────────────────────────────
+
+model ClientGroup {
+  id        String   @id @default(cuid())
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  name      String
+  color     String   @default("#6B7280")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients ClientProfile[]
+
+  @@index([agencyId])
+  @@schema("isysocial")
+  @@map("iso_client_groups")
+}
+
+// ─── USERS & AUTH ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  name         String
+  phone        String?
+  avatarUrl    String?
+  role         Role
+  isActive     Boolean  @default(true)
+  agencyId     String?
+  agency       Agency?  @relation(fields: [agencyId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clientProfile  ClientProfile?
+  editorProfile  EditorProfile?
+  notifications  Notification[]
+  tokens         Token[]
+  postComments   PostComment[]
+  ideaComments   IdeaComment[]
+  postStatusLogs PostStatusLog[]
+  postRevisions  PostRevision[]
+  ideas          Idea[]           @relation("UserIdeas")
+  publishLogs    PostPublishLog[]
+
+  @@schema("isysocial")
+  @@map("iso_users")
+}
+
+model ClientProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
+  groupId     String?
+  group       ClientGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  companyName String
+  logoUrl     String?
+  brandColors Json?
+  brandKit    Json?    // { primaryColor, secondaryColor, accentColor, typography, toneOfVoice, styleNotes }
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  socialNetworks    ClientSocialNetwork[]
+  editorAssignments EditorClientAssignment[]
+  posts             Post[]
+  ideas             Idea[]
+  brandAssets       ClientBrandAsset[]
+
+  @@index([agencyId])
+  @@index([groupId])
+  @@schema("isysocial")
+  @@map("iso_client_profiles")
+}
+
+model EditorProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignedClients EditorClientAssignment[]
+
+  @@schema("isysocial")
+  @@map("iso_editor_profiles")
+}
+
+model EditorClientAssignment {
+  id        String        @id @default(cuid())
+  editorId  String
+  editor    EditorProfile @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([editorId, clientId])
+  @@schema("isysocial")
+  @@map("iso_editor_client_assignments")
+}
+
+model ClientSocialNetwork {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  network     SocialNetwork
+  accountName String?
+  profilePic  String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+
+  // OAuth connection fields
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  accountId      String?    // Platform user/page ID needed for API calls
+  pageId         String?    // Facebook Page ID (Meta uses separate page token)
+  tokenScope     String?    // Granted OAuth scopes (comma-separated)
+  connectedAt    DateTime?
+
+  publishLogs PostPublishLog[]
+
+  @@unique([clientId, network])
+  @@schema("isysocial")
+  @@map("iso_client_social_networks")
+}
+
+// ─── POSTS ────────────────────────────────────────────────────────────────────
+
+model Post {
+  id             String        @id @default(cuid())
+  agencyId       String
+  agency         Agency        @relation(fields: [agencyId], references: [id])
+  clientId       String
+  client         ClientProfile @relation(fields: [clientId], references: [id])
+  editorId       String?
+
+  title          String?
+  copy           String?
+  hashtags       String?
+  network        SocialNetwork
+  postType       PostType
+
+  status         PostStatus    @default(DRAFT)
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+
+  revisionsUsed  Int           @default(0)
+  revisionsLimit Int           @default(3)
+  referenceLink  String?
+
+  categoryId     String?
+  category       PostCategory? @relation(fields: [categoryId], references: [id])
+  mirrorGroupId  String?
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  media       PostMedia[]
+  comments    PostComment[]
+  statusLogs  PostStatusLog[]
+  revisions   PostRevision[]
+  publishLogs PostPublishLog[]
+
+  @@index([agencyId, clientId])
+  @@index([agencyId, status])
+  @@index([scheduledAt])
+  @@index([mirrorGroupId])
+  @@schema("isysocial")
+  @@map("iso_posts")
+}
+
+model PostMedia {
+  id          String   @id @default(cuid())
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String
+  storagePath String
+  mimeType    String
+  fileSize    Int
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_post_media")
+}
+
+model PostComment {
+  id         String   @id @default(cuid())
+  postId     String
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  content    String
+  isInternal Boolean  @default(false)
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@schema("isysocial")
+  @@map("iso_post_comments")
+}
+
+model PostStatusLog {
+  id          String     @id @default(cuid())
+  postId      String
+  post        Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fromStatus  PostStatus?
+  toStatus    PostStatus
+  changedById String
+  changedBy   User       @relation(fields: [changedById], references: [id])
+  note        String?
+  changedAt   DateTime   @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_post_status_logs")
+}
+
+model PostRevision {
+  id          String   @id @default(cuid())
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  version     Int
+  title       String?
+  copy        String?
+  hashtags    String?
+  changedById String
+  changedBy   User     @relation(fields: [changedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([postId])
+  @@schema("isysocial")
+  @@map("iso_post_revisions")
+}
+
+model PostPublishLog {
+  id             String              @id @default(cuid())
+  postId         String
+  post           Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  networkId      String
+  socialNetwork  ClientSocialNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  network        SocialNetwork
+  platformPostId String?             // ID returned by the platform (FB post ID, tweet ID, etc.)
+  platformUrl    String?             // URL to the published post on the platform
+  status         PublishStatus       @default(PENDING)
+  errorMessage   String?
+  requestedById  String
+  requestedBy    User                @relation(fields: [requestedById], references: [id])
+  attemptedAt    DateTime            @default(now())
+  publishedAt    DateTime?
+
+  @@index([postId])
+  @@schema("isysocial")
+  @@map("iso_post_publish_logs")
+}
+
+// ─── IDEAS / BLUEPRINT ────────────────────────────────────────────────────────
+
+model Idea {
+  id              String         @id @default(cuid())
+  agencyId        String
+  agency          Agency         @relation(fields: [agencyId], references: [id])
+  clientId        String?
+  client          ClientProfile? @relation(fields: [clientId], references: [id])
+  createdById     String?
+  createdBy       User?          @relation("UserIdeas", fields: [createdById], references: [id])
+
+  title           String
+  description     String?
+  copyIdeas       String?
+  network         SocialNetwork?
+  postType        PostType?
+  tentativeDate   DateTime?
+  status          IdeaStatus     @default(BACKLOG)
+  convertedPostId String?
+  isClientIdea    Boolean        @default(false)
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  media    IdeaMedia[]
+  links    IdeaLink[]
+  comments IdeaComment[]
+
+  @@index([agencyId, clientId])
+  @@schema("isysocial")
+  @@map("iso_ideas")
+}
+
+model IdeaMedia {
+  id          String   @id @default(cuid())
+  ideaId      String
+  idea        Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String
+  storagePath String
+  mimeType    String
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_idea_media")
+}
+
+model IdeaLink {
+  id            String   @id @default(cuid())
+  ideaId        String
+  idea          Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  url           String
+  ogTitle       String?
+  ogImage       String?
+  ogDescription String?
+  createdAt     DateTime @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_idea_links")
+}
+
+model IdeaComment {
+  id        String   @id @default(cuid())
+  ideaId    String
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_idea_comments")
+}
+
+// ─── POST TEMPLATES ─────────────────────────────────────────────────────────
+
+model PostTemplate {
+  id            String         @id @default(cuid())
+  agencyId      String
+  agency        Agency         @relation(fields: [agencyId], references: [id])
+  name          String
+  description   String?
+  copyTemplate  String?
+  hashtags      String?
+  network       SocialNetwork?
+  postType      PostType?
+  categoryId    String?
+  category      PostCategory?  @relation(fields: [categoryId], references: [id])
+  usageCount    Int            @default(0)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  media TemplateMedia[]
+
+  @@index([agencyId])
+  @@schema("isysocial")
+  @@map("iso_post_templates")
+}
+
+model TemplateMedia {
+  id          String       @id @default(cuid())
+  templateId  String
+  template    PostTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String
+  storagePath String
+  mimeType    String
+  fileSize    Int          @default(0)
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_template_media")
+}
+
+// ─── POST CATEGORIES ─────────────────────────────────────────────────────────
+
+model PostCategory {
+  id        String   @id @default(cuid())
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  name      String
+  color     String   // hex "#FF5722"
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  posts     Post[]
+  templates PostTemplate[]
+
+  @@unique([agencyId, name])
+  @@index([agencyId])
+  @@schema("isysocial")
+  @@map("iso_post_categories")
+}
+
+// ─── CLIENT BRAND ASSETS ─────────────────────────────────────────────────────
+
+model ClientBrandAsset {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label       String
+  fileName    String
+  fileUrl     String
+  storagePath String
+  mimeType    String
+  fileSize    Int
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId])
+  @@schema("isysocial")
+  @@map("iso_client_brand_assets")
+}
+
+// ─── NOTIFICATIONS & SYSTEM ───────────────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+  type        NotificationType
+  title       String
+  body        String
+  isRead      Boolean          @default(false)
+  relatedId   String?
+  relatedType String?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@schema("isysocial")
+  @@map("iso_notifications")
+}
+
+model Token {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  type      TokenType
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@schema("isysocial")
+  @@map("iso_tokens")
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@schema("isysocial")
+  @@map("iso_system_config")
+}
