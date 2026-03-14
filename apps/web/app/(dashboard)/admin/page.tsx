@@ -111,7 +111,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Dashboard" />
-      <main className="flex-1 p-4 md:p-6 space-y-6">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
         {/* Welcome */}
         <div className="flex items-center justify-between">
           <div>

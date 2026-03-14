@@ -1,6 +1,8 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { NotificationListener } from "@/components/layout/notification-listener";
+import { TourProvider } from "@/components/tour/tour-provider";
+import "@/components/tour/tour-styles.css";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
       <NotificationListener />
+      <TourProvider />
     </SidebarProvider>
   );
 }

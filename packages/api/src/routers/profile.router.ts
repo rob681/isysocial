@@ -62,6 +62,30 @@ export const profileRouter = router({
     }),
 
   /**
+   * Mark onboarding as completed
+   */
+  completeOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    await ctx.db.user.update({
+      where: { id: userId },
+      data: { onboardingCompleted: true },
+    });
+    return { success: true };
+  }),
+
+  /**
+   * Get onboarding status
+   */
+  getOnboardingStatus: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const user = await ctx.db.user.findUnique({
+      where: { id: userId },
+      select: { onboardingCompleted: true },
+    });
+    return { onboardingCompleted: user?.onboardingCompleted ?? false };
+  }),
+
+  /**
    * Change password (requires current password)
    */
   changePassword: protectedProcedure

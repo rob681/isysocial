@@ -9,6 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { MockupRenderer } from "@/components/mockups/mockup-renderer";
 import {
   ArrowLeft,
@@ -44,6 +52,7 @@ export default function ClientePostDetailPage() {
   const [comment, setComment] = useState("");
   const [changesNote, setChangesNote] = useState("");
   const [showChangesForm, setShowChangesForm] = useState(false);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
 
   const userRole = (session?.user as any)?.role as Role;
 
@@ -158,12 +167,7 @@ export default function ClientePostDetailPage() {
                           <Button
                             className="bg-green-600 hover:bg-green-700 text-white"
                             disabled={updateStatus.isLoading}
-                            onClick={() =>
-                              updateStatus.mutate({
-                                id: post.id,
-                                toStatus: "APPROVED",
-                              })
-                            }
+                            onClick={() => setApproveDialogOpen(true)}
                           >
                             {updateStatus.isLoading ? (
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -479,6 +483,33 @@ export default function ClientePostDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Approve Confirmation Dialog */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Aprobar publicación</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que quieres aprobar esta publicación? Tu agencia será notificada y podrá proceder a publicarla.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                updateStatus.mutate({ id: post.id, toStatus: "APPROVED" });
+                setApproveDialogOpen(false);
+              }}
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Confirmar aprobación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

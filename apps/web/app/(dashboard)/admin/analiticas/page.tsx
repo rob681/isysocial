@@ -153,7 +153,7 @@ export default function AnalyticsPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Analíticas" />
-      <main className="flex-1 p-4 md:p-6 space-y-6">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
         {/* Header with Range Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

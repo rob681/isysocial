@@ -178,7 +178,7 @@ export default function PerfilPage() {
     return (
       <div className="flex flex-col flex-1">
         <Topbar title="Mi perfil" />
-        <main className="flex-1 p-4 md:p-6 space-y-6 max-w-3xl">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl">
           <Skeleton className="h-48 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
         </main>
@@ -189,7 +189,7 @@ export default function PerfilPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Mi perfil" />
-      <main className="flex-1 p-4 md:p-6 space-y-6 max-w-3xl mx-auto w-full">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl mx-auto w-full">
         {/* Profile Card */}
         <Card>
           <CardContent className="pt-6">

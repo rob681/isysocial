@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,14 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Plus,
   Search,
@@ -41,6 +49,8 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { exportToCSV } from "@/lib/export-csv";
+import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
+import { ContentGrid } from "@/components/content/content-grid";
 
 /* ─── Bulk Action Bar ─────────────────────────────────────────────── */
 function BulkActionBar({
@@ -169,6 +179,17 @@ export default function ContenidoPage() {
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("isysocial-content-view");
+    if (saved === "grid" || saved === "list") setViewMode(saved);
+  }, []);
+  const handleViewChange = (v: ViewMode) => {
+    setViewMode(v);
+    localStorage.setItem("isysocial-content-view", v);
+  };
 
   const utils = trpc.useUtils();
   const { data: categories } = trpc.categories.list.useQuery();
@@ -223,8 +244,12 @@ export default function ContenidoPage() {
 
   function handleBulkDelete() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`¿Eliminar ${selectedIds.size} publicaciones? Esta acción no se puede deshacer.`)) return;
+    setDeleteDialogOpen(true);
+  }
+
+  function confirmBulkDelete() {
     bulkDeleteMutation.mutate({ postIds: Array.from(selectedIds) });
+    setDeleteDialogOpen(false);
   }
 
   function handleBulkCategory(categoryId: string | null) {
@@ -351,6 +376,9 @@ export default function ContenidoPage() {
             </SelectContent>
           </Select>
         )}
+
+        <div className="flex-1" />
+        <ViewToggle view={viewMode} onChange={handleViewChange} />
       </div>
 
       {/* Post list */}
@@ -378,6 +406,22 @@ export default function ContenidoPage() {
             </Link>
           </CardContent>
         </Card>
+      ) : viewMode === "grid" ? (
+        <div className="space-y-4">
+          <ContentGrid
+            posts={data.posts as any}
+            basePath="/admin/contenido"
+            showClient
+          />
+          {/* Pagination */}
+          {data.pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+              <span className="text-sm text-muted-foreground">Página {page} de {data.pages}</span>
+              <Button variant="outline" size="sm" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {/* Select All */}
@@ -526,6 +570,27 @@ export default function ContenidoPage() {
           )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar publicaciones</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que quieres eliminar {selectedIds.size} publicacion{selectedIds.size === 1 ? "" : "es"}? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

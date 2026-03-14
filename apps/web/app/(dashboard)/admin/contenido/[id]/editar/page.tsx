@@ -17,7 +17,7 @@ export default function EditPostPage() {
     return (
       <div className="flex flex-col flex-1">
         <Topbar title="Editar publicación" />
-        <main className="flex-1 p-4 md:p-6 max-w-6xl mx-auto w-full space-y-4">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-4">
           <Skeleton className="h-10 w-64" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
@@ -37,7 +37,7 @@ export default function EditPostPage() {
     return (
       <div className="flex flex-col flex-1">
         <Topbar title="Editar publicación" />
-        <main className="flex-1 p-4 md:p-6 flex items-center justify-center">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 flex items-center justify-center">
           <p className="text-muted-foreground">Publicación no encontrada</p>
         </main>
       </div>
@@ -67,7 +67,7 @@ export default function EditPostPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Editar publicación" />
-      <main className="flex-1 p-4 md:p-6">
+      <main className="flex-1 p-4 md:p-6 lg:p-8">
         <PostEditor
           postId={post.id}
           defaultValues={defaultValues}

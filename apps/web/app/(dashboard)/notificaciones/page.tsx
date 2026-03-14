@@ -137,7 +137,7 @@ export default function NotificacionesPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Notificaciones" />
-      <main className="flex-1 p-4 md:p-6 space-y-4 max-w-3xl">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-4 max-w-3xl">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

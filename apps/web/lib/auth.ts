@@ -70,6 +70,7 @@ export const authOptions: NextAuthOptions = {
           clientProfileId: user.clientProfile?.id,
           editorProfileId: user.editorProfile?.id,
           permissions: (user.editorProfile?.permissions as string[]) ?? [],
+          onboardingCompleted: user.onboardingCompleted,
         };
       },
     }),
@@ -84,6 +85,7 @@ export const authOptions: NextAuthOptions = {
         token.clientProfileId = (user as any).clientProfileId;
         token.editorProfileId = (user as any).editorProfileId;
         token.permissions = (user as any).permissions ?? [];
+        token.onboardingCompleted = (user as any).onboardingCompleted ?? false;
       }
       return token;
     },
@@ -96,6 +98,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).clientProfileId = token.clientProfileId;
         (session.user as any).editorProfileId = token.editorProfileId;
         (session.user as any).permissions = token.permissions ?? [];
+        (session.user as any).onboardingCompleted = token.onboardingCompleted ?? false;
       }
       return session;
     },

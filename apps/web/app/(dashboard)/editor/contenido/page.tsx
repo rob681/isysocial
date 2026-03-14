@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -31,12 +31,24 @@ import {
   POST_TYPE_LABELS,
 } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
+import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
+import { ContentGrid } from "@/components/content/content-grid";
 
 export default function EditorContenidoPage() {
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("isysocial-content-view");
+    if (saved === "grid" || saved === "list") setViewMode(saved);
+  }, []);
+  const handleViewChange = (v: ViewMode) => {
+    setViewMode(v);
+    localStorage.setItem("isysocial-content-view", v);
+  };
 
   const { data, isLoading } = trpc.posts.list.useQuery({
     search: search || undefined,
@@ -101,6 +113,9 @@ export default function EditorContenidoPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <div className="flex-1" />
+        <ViewToggle view={viewMode} onChange={handleViewChange} />
       </div>
 
       {/* Post list */}
@@ -128,6 +143,21 @@ export default function EditorContenidoPage() {
             </Link>
           </CardContent>
         </Card>
+      ) : viewMode === "grid" ? (
+        <div className="space-y-4">
+          <ContentGrid
+            posts={data.posts as any}
+            basePath="/editor/contenido"
+            showClient
+          />
+          {data.pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+              <span className="text-sm text-muted-foreground">Página {page} de {data.pages}</span>
+              <Button variant="outline" size="sm" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {data.posts.map((post) => {

@@ -422,7 +422,7 @@ export const postsRouter = router({
             subject: `Contenido listo para revisar: "${postTitle}"`,
             title: "Tienes contenido esperando tu revisión",
             body: `El post <strong>"${postTitle}"</strong> está listo para que lo revises y apruebes.<br><br>Ingresa a tu portal para verlo y dejar tus comentarios.`,
-            actionUrl: `${baseUrl}/cliente/posts/${post.id}`,
+            actionUrl: `${baseUrl}/cliente/contenido/${post.id}`,
             actionLabel: "Revisar contenido",
           }).catch(() => {});
         }
@@ -441,7 +441,7 @@ export const postsRouter = router({
             subject: `¡Tu post fue aprobado! "${postTitle}"`,
             title: "¡Contenido aprobado!",
             body: `${post.client.user.name} aprobó el post <strong>"${postTitle}"</strong>. ¡Excelente trabajo!`,
-            actionUrl: `${baseUrl}/editor/posts/${post.id}`,
+            actionUrl: `${baseUrl}/editor/contenido/${post.id}`,
             actionLabel: "Ver post",
           }).catch(() => {});
         }
@@ -461,8 +461,24 @@ export const postsRouter = router({
             subject: `Se solicitaron cambios en "${postTitle}"`,
             title: "Tu cliente solicita cambios",
             body: `${post.client.user.name} solicitó cambios en <strong>"${postTitle}"</strong>.${noteText}`,
-            actionUrl: `${baseUrl}/editor/posts/${post.id}`,
+            actionUrl: `${baseUrl}/editor/contenido/${post.id}`,
             actionLabel: "Ver cambios solicitados",
+          }).catch(() => {});
+        }
+      }
+
+      if (toStatus === "PUBLISHED") {
+        // Notify client: their post has been published
+        const clientEmail = post.client.user.email;
+        if (clientEmail) {
+          sendEmailNotification({
+            db: ctx.db,
+            to: clientEmail,
+            subject: `Tu publicación fue publicada: "${postTitle}"`,
+            title: "¡Tu contenido está en vivo!",
+            body: `El post <strong>"${postTitle}"</strong> ha sido publicado exitosamente.`,
+            actionUrl: `${baseUrl}/cliente/contenido/${post.id}`,
+            actionLabel: "Ver publicación",
           }).catch(() => {});
         }
       }
@@ -546,7 +562,7 @@ export const postsRouter = router({
             subject: `Nuevo comentario en "${postTitle}"`,
             title: "Tienes un nuevo comentario",
             body: `<strong>${user.name}</strong> comentó en <strong>"${postTitle}"</strong>:<br><br><em>"${commentPreview}"</em>`,
-            actionUrl: `${baseUrl}/cliente/posts/${post.id}`,
+            actionUrl: `${baseUrl}/cliente/contenido/${post.id}`,
             actionLabel: "Ver comentario",
           }).catch(() => {});
         }
@@ -565,7 +581,7 @@ export const postsRouter = router({
             subject: `${post.client.user.name} comentó en "${postTitle}"`,
             title: "Tu cliente dejó un comentario",
             body: `<strong>${post.client.user.name}</strong> comentó en <strong>"${postTitle}"</strong>:<br><br><em>"${commentPreview}"</em>`,
-            actionUrl: `${baseUrl}/editor/posts/${post.id}`,
+            actionUrl: `${baseUrl}/editor/contenido/${post.id}`,
             actionLabel: "Ver comentario",
           }).catch(() => {});
         }

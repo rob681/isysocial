@@ -116,6 +116,11 @@ model Agency {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // AI credits
+  aiCreditsUsed   Int       @default(0)
+  aiCreditsLimit  Int       @default(1000)
+  aiCreditResetAt DateTime?
+
   users        User[]
   clients      ClientProfile[]
   clientGroups ClientGroup[]
@@ -150,18 +155,19 @@ model ClientGroup {
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String?
-  name         String
-  phone        String?
-  avatarUrl    String?
-  role         Role
-  isActive     Boolean  @default(true)
-  agencyId     String?
-  agency       Agency?  @relation(fields: [agencyId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  passwordHash         String?
+  name                 String
+  phone                String?
+  avatarUrl            String?
+  role                 Role
+  isActive             Boolean  @default(true)
+  onboardingCompleted  Boolean  @default(false)
+  agencyId             String?
+  agency               Agency?  @relation(fields: [agencyId], references: [id])
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   clientProfile  ClientProfile?
   editorProfile  EditorProfile?

@@ -26,9 +26,10 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostType } from "@isysocial/shared";
 import type { MockupMedia } from "@/components/mockups/types";
-import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles, PanelRightOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
+import { AiAssistant } from "./ai-assistant";
 
 const formSchema = z.object({
   clientId: z.string().min(1, "Selecciona un cliente"),
@@ -58,6 +59,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
     { url: string; storagePath: string; fileName: string; mimeType: string; fileSize: number }[]
   >([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
 
   const { data: clients } = trpc.posts.getClientsForSelect.useQuery();
   const { data: categories } = trpc.categories.list.useQuery();
@@ -425,7 +427,19 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
 
           {/* Copy */}
           <div className="space-y-2">
-            <Label>Copy / Caption</Label>
+            <div className="flex items-center justify-between">
+              <Label>Copy / Caption</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setShowAiAssistant(!showAiAssistant)}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                {showAiAssistant ? "Cerrar IA" : "Asistente IA"}
+              </Button>
+            </div>
             <Textarea
               placeholder="Escribe el texto de la publicación..."
               rows={5}
@@ -500,7 +514,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
       </div>
 
       {/* ─── Right: Live Preview ───────────────────────────────────── */}
-      <div className="lg:w-[380px] xl:w-[420px] flex-shrink-0">
+      <div className={`${showAiAssistant ? "lg:w-[320px]" : "lg:w-[380px] xl:w-[420px]"} flex-shrink-0 transition-all`}>
         <div className="sticky top-6">
           <h3 className="text-sm font-semibold text-muted-foreground mb-3">Vista previa</h3>
           <div className="flex justify-center p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border">
@@ -516,6 +530,27 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
           </div>
         </div>
       </div>
+
+      {/* ─── AI Assistant Panel ────────────────────────────────────── */}
+      {showAiAssistant && (
+        <AiAssistant
+          network={watchedValues.network}
+          clientId={watchedValues.clientId}
+          onInsert={(text) => {
+            // Split text into copy and hashtags
+            const hashtagMatch = text.match(/((?:#\w+\s*)+)$/);
+            if (hashtagMatch) {
+              const hashtags = hashtagMatch[1].trim();
+              const copy = text.replace(hashtagMatch[0], "").trim();
+              form.setValue("copy", copy);
+              form.setValue("hashtags", hashtags);
+            } else {
+              form.setValue("copy", text);
+            }
+          }}
+          onClose={() => setShowAiAssistant(false)}
+        />
+      )}
     </div>
   );
 }

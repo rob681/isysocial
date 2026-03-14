@@ -1,0 +1,70 @@
+/* Custom styles for driver.js tour popover */
+.isysocial-tour-popover {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+  max-width: 340px !important;
+}
+
+.isysocial-tour-popover .driver-popover-title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.isysocial-tour-popover .driver-popover-description {
+  font-size: 13px !important;
+  color: hsl(var(--muted-foreground)) !important;
+  line-height: 1.5 !important;
+  margin-top: 6px !important;
+}
+
+.isysocial-tour-popover .driver-popover-progress-text {
+  font-size: 11px !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.isysocial-tour-popover .driver-popover-navigation-btns {
+  gap: 8px !important;
+}
+
+.isysocial-tour-popover .driver-popover-next-btn {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--chart-1, var(--primary)))) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-shadow: none !important;
+}
+
+.isysocial-tour-popover .driver-popover-prev-btn {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  text-shadow: none !important;
+}
+
+.isysocial-tour-popover .driver-popover-close-btn {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.isysocial-tour-popover .driver-popover-arrow-side-left {
+  border-right-color: hsl(var(--card)) !important;
+}
+.isysocial-tour-popover .driver-popover-arrow-side-right {
+  border-left-color: hsl(var(--card)) !important;
+}
+.isysocial-tour-popover .driver-popover-arrow-side-top {
+  border-bottom-color: hsl(var(--card)) !important;
+}
+.isysocial-tour-popover .driver-popover-arrow-side-bottom {
+  border-top-color: hsl(var(--card)) !important;
+}

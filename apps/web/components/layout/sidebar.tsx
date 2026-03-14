@@ -47,35 +47,36 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   comingSoon?: boolean;
+  tourId?: string;
 }
 
 // ─── Admin Navigation ─────────────────────────────────────────────────────
 
 const adminMainNav: NavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: <LayoutDashboard className="h-5 w-5" /> },
-  { label: "Aprobaciones", href: "/admin/aprobaciones", icon: <CheckCircle2 className="h-5 w-5" /> },
+  { label: "Dashboard", href: "/admin", icon: <LayoutDashboard className="h-5 w-5" />, tourId: "sidebar-dashboard" },
+  { label: "Aprobaciones", href: "/admin/aprobaciones", icon: <CheckCircle2 className="h-5 w-5" />, tourId: "sidebar-approvals" },
 ];
 
 const adminToolsNav: NavItem[] = [
-  { label: "Clientes", href: "/admin/clientes", icon: <UserCircle className="h-5 w-5" /> },
-  { label: "Equipo", href: "/admin/equipo", icon: <Users className="h-5 w-5" /> },
+  { label: "Clientes", href: "/admin/clientes", icon: <UserCircle className="h-5 w-5" />, tourId: "sidebar-clients" },
+  { label: "Equipo", href: "/admin/equipo", icon: <Users className="h-5 w-5" />, tourId: "sidebar-team" },
   { label: "Plantillas", href: "/admin/plantillas", icon: <LayoutTemplate className="h-5 w-5" /> },
   { label: "Analíticas", href: "/admin/analiticas", icon: <BarChart3 className="h-5 w-5" /> },
   { label: "Archivo", href: "/admin/archivo", icon: <Archive className="h-5 w-5" /> },
   { label: "Grid Preview", href: "/admin/grid-preview", icon: <Grid3X3 className="h-5 w-5" /> },
-  { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" /> },
+  { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" />, tourId: "sidebar-settings" },
 ];
 
 const clientSubItems = [
-  { label: "Calendario", segment: "calendario", icon: <Calendar className="h-4 w-4" /> },
-  { label: "Contenido", segment: "contenido", icon: <FileImage className="h-4 w-4" /> },
+  { label: "Calendario", segment: "calendario", icon: <Calendar className="h-4 w-4" />, tourId: "sidebar-calendar" },
+  { label: "Contenido", segment: "contenido", icon: <FileImage className="h-4 w-4" />, tourId: "sidebar-content" },
   { label: "Ideas", segment: "ideas", icon: <Lightbulb className="h-4 w-4" /> },
 ];
 
 // ─── Editor Navigation ────────────────────────────────────────────────────
 
 const editorMainNav: NavItem[] = [
-  { label: "Dashboard", href: "/editor", icon: <LayoutDashboard className="h-5 w-5" /> },
+  { label: "Dashboard", href: "/editor", icon: <LayoutDashboard className="h-5 w-5" />, tourId: "sidebar-dashboard" },
 ];
 
 const editorToolsNav: NavItem[] = [
@@ -85,12 +86,12 @@ const editorToolsNav: NavItem[] = [
 // ─── Cliente Navigation ───────────────────────────────────────────────────
 
 const clienteNav: NavItem[] = [
-  { label: "Inicio", href: "/cliente", icon: <LayoutDashboard className="h-5 w-5" /> },
-  { label: "Calendario", href: "/cliente/calendario", icon: <Calendar className="h-5 w-5" /> },
-  { label: "Contenido", href: "/cliente/contenido", icon: <FileImage className="h-5 w-5" /> },
-  { label: "Ideas", href: "/cliente/ideas", icon: <Lightbulb className="h-5 w-5" /> },
+  { label: "Inicio", href: "/cliente", icon: <LayoutDashboard className="h-5 w-5" />, tourId: "sidebar-dashboard" },
+  { label: "Calendario", href: "/cliente/calendario", icon: <Calendar className="h-5 w-5" />, tourId: "sidebar-calendar" },
+  { label: "Contenido", href: "/cliente/contenido", icon: <FileImage className="h-5 w-5" />, tourId: "sidebar-content" },
+  { label: "Ideas", href: "/cliente/ideas", icon: <Lightbulb className="h-5 w-5" />, tourId: "sidebar-ideas" },
   { label: "Archivo", href: "/cliente/archivo", icon: <Archive className="h-5 w-5" /> },
-  { label: "Mi Marca", href: "/cliente/marca", icon: <Palette className="h-5 w-5" /> },
+  { label: "Mi Marca", href: "/cliente/marca", icon: <Palette className="h-5 w-5" />, tourId: "sidebar-brand" },
 ];
 
 // ─── SuperAdmin / Soporte / Facturación Navigation ────────────────────────
@@ -285,6 +286,7 @@ function IconNavItem({
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       )}
       title={item.label}
+      {...(item.tourId ? { "data-tour": item.tourId } : {})}
     >
       {item.icon}
     </Link>
@@ -326,6 +328,7 @@ function ExpandedNavItem({
           ? "gradient-primary text-white shadow-md"
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       )}
+      {...(item.tourId ? { "data-tour": item.tourId } : {})}
     >
       {item.icon}
       <span className="truncate">{item.label}</span>
@@ -664,6 +667,7 @@ function ClientItem({
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
+                {...(sub.tourId ? { "data-tour": sub.tourId } : {})}
               >
                 {sub.icon}
                 <span>{sub.label}</span>
@@ -1558,7 +1562,7 @@ function DesktopSidebarInner() {
     // ADMIN / EDITOR — dual column layout (or collapsed)
     if (sidebarMode === "collapsed") {
       return (
-        <aside className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
+        <aside data-tour="sidebar" className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
           <IconBar
             collapsed={true}
             showClientList={true}
@@ -1571,7 +1575,7 @@ function DesktopSidebarInner() {
 
     const iconBarCollapsed = sidebarMode === "clients";
     return (
-      <aside className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
+      <aside data-tour="sidebar" className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
         <IconBar
           collapsed={iconBarCollapsed}
           showClientList={true}
@@ -1595,7 +1599,7 @@ function DesktopSidebarInner() {
 
   // Non-client roles — single column, expand/collapse
   return (
-    <aside className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
+    <aside data-tour="sidebar" className="hidden md:flex h-screen sticky top-0 transition-all duration-300">
       <IconBar
         collapsed={!iconbarExpanded}
         showClientList={false}

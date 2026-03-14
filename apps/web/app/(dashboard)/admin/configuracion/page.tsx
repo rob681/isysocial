@@ -428,7 +428,7 @@ export default function ConfiguracionPage() {
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Configuración" />
-      <main className="flex-1 p-4 md:p-6 space-y-6 max-w-2xl">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 max-w-2xl">
         <div>
           <h1 className="text-xl font-bold">Configuración de agencia</h1>
           <p className="text-sm text-muted-foreground mt-1">
