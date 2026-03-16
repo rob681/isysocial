@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc/client";
 import { useToast } from "@/hooks/use-toast";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, SkipForward } from "lucide-react";
 import { BrochureQuestion } from "./brochure-question";
 
 interface BrochureGuidedQuestionnaireProps {
@@ -21,6 +21,7 @@ interface Question {
   hint?: string;
   inputType: string;
   required: boolean;
+  options?: string[];
 }
 
 export function BrochureGuidedQuestionnaire({
@@ -32,6 +33,7 @@ export function BrochureGuidedQuestionnaire({
   const [questions, setQuestions] = useState<Question[]>(initialQuestions || []);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skippedQuestions, setSkippedQuestions] = useState<Set<string>>(new Set());
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(!initialQuestions);
 
   const submitAnswer = trpc.brandBrochure.submitAnswer.useMutation({
@@ -45,6 +47,7 @@ export function BrochureGuidedQuestionnaire({
           hint: q.hint,
           inputType: q.inputType || "textarea",
           required: true,
+          options: q.options,
         }));
         setQuestions([...questions, ...newQuestions]);
       }
@@ -87,8 +90,8 @@ export function BrochureGuidedQuestionnaire({
   };
 
   const handleNext = async () => {
-    if (!answers[currentQuestion.questionId] && currentQuestion.required) {
-      toast({ title: "Por favor responde la pregunta", variant: "default" });
+    if (!answers[currentQuestion.questionId] && !skippedQuestions.has(currentQuestion.questionId)) {
+      toast({ title: "Por favor responde la pregunta o haz clic en \"Omitir\"", variant: "default" });
       return;
     }
 
@@ -99,7 +102,19 @@ export function BrochureGuidedQuestionnaire({
     });
   };
 
-  const isAnswered = currentQuestion.questionId in answers;
+  const handleSkip = async () => {
+    // Mark as skipped
+    setSkippedQuestions((prev) => new Set(prev).add(currentQuestion.questionId));
+    // Submit empty answer to move forward
+    await submitAnswer.mutateAsync({
+      sessionId,
+      questionId: currentQuestion.questionId,
+      answer: "",
+    });
+  };
+
+  const isAnswered = currentQuestion.questionId in answers || skippedQuestions.has(currentQuestion.questionId);
+  const isSkipped = skippedQuestions.has(currentQuestion.questionId);
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
@@ -123,11 +138,39 @@ export function BrochureGuidedQuestionnaire({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <BrochureQuestion
-          question={currentQuestion}
-          value={answers[currentQuestion.questionId] || ""}
-          onChange={handleAnswer}
-        />
+        {isSkipped ? (
+          <div className="rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-6 text-center space-y-2">
+            <SkipForward className="h-8 w-8 text-muted-foreground/50 mx-auto" />
+            <p className="text-sm font-medium text-muted-foreground">Pregunta omitida</p>
+            <Button
+              variant="link"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setSkippedQuestions((prev) => {
+                  const next = new Set(prev);
+                  next.delete(currentQuestion.questionId);
+                  return next;
+                });
+              }}
+            >
+              Quiero responder esta pregunta
+            </Button>
+          </div>
+        ) : (
+          <BrochureQuestion
+            question={currentQuestion}
+            value={answers[currentQuestion.questionId] || ""}
+            onChange={handleAnswer}
+          />
+        )}
+
+        {/* Hint for client */}
+        {!isSkipped && !answers[currentQuestion.questionId] && (
+          <p className="text-xs text-muted-foreground/70 italic">
+            Si no conoces la respuesta, puedes omitir esta pregunta.
+          </p>
+        )}
 
         <div className="flex gap-2">
           <Button
@@ -137,6 +180,23 @@ export function BrochureGuidedQuestionnaire({
           >
             Anterior
           </Button>
+
+          {!isSkipped && !answers[currentQuestion.questionId] && (
+            <Button
+              variant="ghost"
+              onClick={handleSkip}
+              disabled={submitAnswer.isPending}
+              className="text-muted-foreground"
+            >
+              {submitAnswer.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <SkipForward className="h-4 w-4 mr-2" />
+              )}
+              Omitir
+            </Button>
+          )}
+
           <Button
             onClick={handleNext}
             disabled={!isAnswered || submitAnswer.isPending}

@@ -31,7 +31,9 @@ import {
   Megaphone,
   Sparkles,
   FileText,
+  Wand2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { AIBrandAssistant } from "@/components/brand/ai-brand-assistant";
 import { Topbar } from "@/components/layout/topbar";
@@ -109,6 +111,7 @@ function QuestionBlock({
 // ─── Main Page ────────────────────────────────────────────────────────────
 
 export default function ClienteBrandKitPage() {
+  const router = useRouter();
   const { data: session } = useSession();
   const { toast } = useToast();
   const clientProfileId = (session?.user as any)?.clientProfileId as
@@ -314,6 +317,14 @@ export default function ClienteBrandKitPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 print:hidden">
+            <Button
+              size="sm"
+              onClick={() => router.push("/cliente/marca-guiada")}
+              className="gap-2 gradient-primary text-white"
+            >
+              <Wand2 className="h-4 w-4" />
+              Brochure Guiado
+            </Button>
             <Button
               variant="outline"
               size="sm"

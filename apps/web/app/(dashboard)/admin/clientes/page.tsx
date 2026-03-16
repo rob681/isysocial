@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Topbar } from "@/components/layout/topbar";
@@ -480,6 +481,7 @@ function ClientCard({
   client: any;
   onEdit: (client: any) => void;
 }) {
+  const router = useRouter();
   const initials = client.companyName
     .split(" ")
     .map((w: string) => w[0])
@@ -488,7 +490,10 @@ function ClientCard({
     .toUpperCase();
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className="hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => router.push(`/admin/clientes/${client.id}`)}
+    >
       <CardContent className="pt-4 pb-4">
         <div className="flex items-start gap-3">
           {/* Avatar */}
@@ -513,14 +518,6 @@ function ClientCard({
                 <p className="text-sm text-muted-foreground truncate">{client.user.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{client.user.email}</p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0"
-                onClick={() => onEdit(client)}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
             </div>
 
             {/* Social Networks */}

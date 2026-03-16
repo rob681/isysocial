@@ -708,6 +708,227 @@ export const clientsRouter = router({
       return { success: true, message: "Página desvinculada" };
     }),
 
+  // ─── SOCIAL NETWORKS DASHBOARD (Hootsuite-style) ─────────────────────────
+
+  getSocialNetworksDashboard: adminProcedure.query(async ({ ctx }) => {
+    const agencyId = getAgencyId(ctx);
+
+    // Get all agency accounts
+    const agencyAccounts = await ctx.db.agencySocialAccount.findMany({
+      where: { agencyId, isActive: true },
+      orderBy: [{ network: "asc" }, { accountName: "asc" }],
+    });
+
+    // Get all client social network assignments
+    const clientAssignments = await ctx.db.clientSocialNetwork.findMany({
+      where: {
+        client: { agencyId },
+        isActive: true,
+      },
+      include: {
+        client: { select: { id: true, companyName: true, logoUrl: true } },
+      },
+      orderBy: [{ network: "asc" }],
+    });
+
+    // Get all clients for this agency (to show unassigned ones too)
+    const allClients = await ctx.db.clientProfile.findMany({
+      where: { agencyId, isActive: true },
+      select: { id: true, companyName: true, logoUrl: true },
+      orderBy: { companyName: "asc" },
+    });
+
+    // Get draft/scheduled/published post counts per client
+    const postCounts = await ctx.db.post.groupBy({
+      by: ["clientId", "status"],
+      where: { client: { agencyId } },
+      _count: { id: true },
+    });
+
+    // Build network-centric structure
+    const networks = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "X", "TIKTOK"];
+    const dashboard: Record<
+      string,
+      {
+        accounts: typeof agencyAccounts;
+        clientAssignments: Record<
+          string,
+          {
+            clientId: string;
+            companyName: string | null;
+            logoUrl: string | null;
+            pages: { pageId: string | null; accountName: string | null; profilePic: string | null }[];
+          }
+        >;
+      }
+    > = {};
+
+    for (const network of networks) {
+      dashboard[network] = {
+        accounts: agencyAccounts.filter((a) => a.network === network),
+        clientAssignments: {},
+      };
+
+      const networkAssignments = clientAssignments.filter((a) => a.network === network);
+      for (const assignment of networkAssignments) {
+        const cId = assignment.clientId;
+        if (!dashboard[network].clientAssignments[cId]) {
+          dashboard[network].clientAssignments[cId] = {
+            clientId: cId,
+            companyName: assignment.client.companyName,
+            logoUrl: assignment.client.logoUrl,
+            pages: [],
+          };
+        }
+        dashboard[network].clientAssignments[cId].pages.push({
+          pageId: assignment.pageId,
+          accountName: assignment.accountName,
+          profilePic: assignment.profilePic,
+        });
+      }
+    }
+
+    // Build post counts per client
+    const clientPostCounts: Record<string, Record<string, number>> = {};
+    for (const pc of postCounts) {
+      if (!pc.clientId) continue;
+      if (!clientPostCounts[pc.clientId]) clientPostCounts[pc.clientId] = {};
+      clientPostCounts[pc.clientId][pc.status] = pc._count.id;
+    }
+
+    return { dashboard, allClients, clientPostCounts };
+  }),
+
+  getClientSocialNetworksDetail: protectedProcedure
+    .input(z.object({ clientId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true, companyName: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      // Get assigned pages
+      const pages = await ctx.db.clientSocialNetwork.findMany({
+        where: { clientId: input.clientId, isActive: true },
+        orderBy: [{ network: "asc" }, { accountName: "asc" }],
+      });
+
+      // Get post counts per network for this client
+      const postCounts = await ctx.db.post.groupBy({
+        by: ["status"],
+        where: { clientId: input.clientId },
+        _count: { id: true },
+      });
+
+      const counts: Record<string, number> = {};
+      for (const pc of postCounts) {
+        counts[pc.status] = pc._count.id;
+      }
+
+      // Get last published post date
+      const lastPublished = await ctx.db.post.findFirst({
+        where: { clientId: input.clientId, status: "PUBLISHED" },
+        orderBy: { publishedAt: "desc" },
+        select: { publishedAt: true },
+      });
+
+      // Group by network
+      const grouped = pages.reduce(
+        (acc, page) => {
+          if (!acc[page.network]) acc[page.network] = [];
+          acc[page.network].push({
+            id: page.id,
+            pageId: page.pageId,
+            accountName: page.accountName,
+            profilePic: page.profilePic,
+            isActive: page.isActive,
+            assignedAt: page.assignedAt,
+          });
+          return acc;
+        },
+        {} as Record<string, any[]>
+      );
+
+      return {
+        pages: grouped,
+        total: pages.length,
+        postCounts: counts,
+        lastPublishedAt: lastPublished?.publishedAt ?? null,
+      };
+    }),
+
+  assignNetworksToClient: adminProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        assignments: z.array(
+          z.object({
+            network: z.string(),
+            pageIds: z.array(z.string()),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      let totalAssigned = 0;
+
+      for (const assignment of input.assignments) {
+        // Get agency pages for this network
+        const agencyPages = await ctx.db.agencySocialAccount.findMany({
+          where: {
+            id: { in: assignment.pageIds },
+            agencyId,
+            network: assignment.network as any,
+          },
+        });
+
+        // Delete old assignments for this network
+        await ctx.db.clientSocialNetwork.deleteMany({
+          where: {
+            clientId: input.clientId,
+            network: assignment.network as any,
+          },
+        });
+
+        // Create new assignments
+        for (const page of agencyPages) {
+          await ctx.db.clientSocialNetwork.create({
+            data: {
+              clientId: input.clientId,
+              network: page.network,
+              pageId: page.pageId || page.accountId,
+              accountName: page.accountName,
+              profilePic: page.profilePic,
+              sourceType: "agency",
+              agencyAccountId: page.id,
+              accessToken: page.accessToken,
+              tokenExpiresAt: page.tokenExpiresAt,
+              accountId: page.accountId,
+              tokenScope: page.tokenScope,
+            },
+          });
+          totalAssigned++;
+        }
+      }
+
+      return { success: true, totalAssigned };
+    }),
+
   getClientPages: protectedProcedure
     .input(z.object({ clientId: z.string() }))
     .query(async ({ ctx, input }) => {

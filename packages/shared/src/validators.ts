@@ -111,6 +111,7 @@ export const createPostSchema = z.object({
   revisionsLimit: z.number().int().min(1).max(10).default(3),
   referenceLink: z.string().url().optional().or(z.literal("")),
   categoryId: z.string().optional(),
+  initialStatus: z.enum(["DRAFT", "IN_REVIEW"]).default("DRAFT"),
 });
 
 export const updatePostContentSchema = z.object({

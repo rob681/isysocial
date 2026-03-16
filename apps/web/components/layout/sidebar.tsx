@@ -33,7 +33,9 @@ import {
   CheckCircle2,
   Search,
   Palette,
+  Share2,
   ChevronsLeft,
+  Wand2,
 } from "lucide-react";
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { useTheme } from "next-themes";
@@ -63,6 +65,7 @@ const adminToolsNav: NavItem[] = [
   { label: "Plantillas", href: "/admin/plantillas", icon: <LayoutTemplate className="h-5 w-5" /> },
   { label: "Analíticas", href: "/admin/analiticas", icon: <BarChart3 className="h-5 w-5" /> },
   { label: "Archivo", href: "/admin/archivo", icon: <Archive className="h-5 w-5" /> },
+  { label: "Redes Sociales", href: "/admin/redes-sociales", icon: <Share2 className="h-5 w-5" /> },
   { label: "Grid Preview", href: "/admin/grid-preview", icon: <Grid3X3 className="h-5 w-5" /> },
   { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" />, tourId: "sidebar-settings" },
 ];
@@ -100,6 +103,7 @@ const clienteNav: NavItem[] = [
   { label: "Ideas", href: "/cliente/ideas", icon: <Lightbulb className="h-5 w-5" />, tourId: "sidebar-ideas" },
   { label: "Archivo", href: "/cliente/archivo", icon: <Archive className="h-5 w-5" /> },
   { label: "Mi Marca", href: "/cliente/marca", icon: <Palette className="h-5 w-5" />, tourId: "sidebar-brand" },
+  { label: "Brochure Guiado", href: "/cliente/marca-guiada", icon: <Wand2 className="h-5 w-5" /> },
 ];
 
 // ─── SuperAdmin / Soporte / Facturación Navigation ────────────────────────

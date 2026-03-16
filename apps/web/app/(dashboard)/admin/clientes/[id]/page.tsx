@@ -19,10 +19,12 @@ import {
   Globe,
   User,
   LayoutGrid,
+  Share2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Topbar } from "@/components/layout/topbar";
 import { ClientPageSelector } from "@/components/social-networks/client-page-selector";
+import { ClientSocialNetworksEditor } from "@/components/social-networks/client-social-networks-editor";
 
 // ── Network metadata ──────────────────────────────────────────────────────────
 const NETWORK_META: Record<
@@ -207,9 +209,13 @@ export default function ClientDetailPage() {
             <User className="h-4 w-4 mr-2" />
             Información
           </TabsTrigger>
+          <TabsTrigger value="paginas">
+            <Share2 className="h-4 w-4 mr-2" />
+            Páginas Vinculadas
+          </TabsTrigger>
           <TabsTrigger value="redes">
             <Globe className="h-4 w-4 mr-2" />
-            Redes Sociales
+            Conexiones OAuth
           </TabsTrigger>
         </TabsList>
 
@@ -273,6 +279,11 @@ export default function ClientDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Páginas Vinculadas Tab ─────────────────────────────────────── */}
+        <TabsContent value="paginas" className="space-y-4">
+          <ClientSocialNetworksEditor clientId={clientId} />
         </TabsContent>
 
         {/* ── Redes Sociales Tab ────────────────────────────────────────────── */}

@@ -2,20 +2,33 @@
 
 import { CheckCircle2, Circle } from "lucide-react";
 
+type Step = "path-select" | "upload" | "questionnaire" | "fields" | "preview" | "complete";
+
 interface BrochureProgressProps {
-  currentStep: "questionnaire" | "fields" | "complete";
+  currentStep: Step;
   isComplete: boolean;
 }
 
-export function BrochureProgress({ currentStep, isComplete }: BrochureProgressProps) {
-  const steps = [
-    { id: "questionnaire", label: "Preguntas" },
-    { id: "fields", label: "Campos de Marca" },
-    { id: "complete", label: "Completo" },
-  ];
+const steps = [
+  { id: "path-select", label: "Método" },
+  { id: "info", label: "Información" },   // represents upload OR questionnaire
+  { id: "fields", label: "Campos" },
+  { id: "preview", label: "Revisión" },
+  { id: "complete", label: "Completo" },
+];
 
-  const getStepIndex = (step: string) => steps.findIndex((s) => s.id === step);
-  const currentIndex = getStepIndex(currentStep);
+// Map the actual step to a display index
+function getDisplayIndex(step: Step): number {
+  if (step === "path-select") return 0;
+  if (step === "upload" || step === "questionnaire") return 1;
+  if (step === "fields") return 2;
+  if (step === "preview") return 3;
+  if (step === "complete") return 4;
+  return 0;
+}
+
+export function BrochureProgress({ currentStep, isComplete }: BrochureProgressProps) {
+  const currentIndex = getDisplayIndex(currentStep);
 
   return (
     <div className="flex items-center justify-between">

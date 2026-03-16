@@ -26,7 +26,7 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostType } from "@isysocial/shared";
 import type { MockupMedia } from "@/components/mockups/types";
-import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles, PanelRightOpen } from "lucide-react";
+import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles, PanelRightOpen, FileEdit, SendHorizonal } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { AiAssistant } from "./ai-assistant";
@@ -81,7 +81,12 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
           })),
         });
       }
-      toast({ title: "Publicación creada", description: "El borrador se guardó correctamente." });
+      toast({
+        title: "Publicación creada",
+        description: data.status === "IN_REVIEW"
+          ? "Enviada para aprobación del cliente."
+          : "El borrador se guardó correctamente.",
+      });
       router.push("/admin/contenido");
     },
     onError: (err) => {
@@ -147,7 +152,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
       }))
     : defaultMedia || [];
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = (data: FormValues, sendForReview = false) => {
     if (postId) {
       updateContent.mutate({
         id: postId,
@@ -170,6 +175,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
         revisionsLimit: data.revisionsLimit,
         referenceLink: data.referenceLink,
+        initialStatus: sendForReview ? "IN_REVIEW" : "DRAFT",
       });
     }
   };
@@ -295,7 +301,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
           </Card>
         )}
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+        <form onSubmit={form.handleSubmit((data) => onSubmit(data, false))} className="space-y-5">
           {/* Client selector */}
           {!postId && (
             <div className="space-y-2">
@@ -501,14 +507,29 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-4">
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" variant="outline" disabled={isLoading}>
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {postId ? "Guardar cambios" : "Guardar borrador"}
+              {postId ? "Guardar cambios" : "Guardar como Borrador"}
             </Button>
+            {!postId && (
+              <Button
+                type="button"
+                disabled={isLoading}
+                onClick={form.handleSubmit((data) => onSubmit(data, true))}
+                className="gradient-primary text-white"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Enviar para Aprobación
+              </Button>
+            )}
           </div>
         </form>
       </div>

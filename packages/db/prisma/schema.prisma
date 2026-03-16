@@ -683,6 +683,7 @@ model BrandBrochureSession {
 
   questions BrandBrochureQuestion[]
   fields    BrandBrochureField[]
+  uploads   BrandBrochureUpload[]
 
   @@unique([clientId])
   @@index([clientId])
@@ -735,6 +736,27 @@ model BrandBrochureField {
   @@unique([sessionId, fieldId])
   @@index([sessionId])
   @@map("iso_brand_brochure_fields")
+  @@schema("isysocial")
+}
+
+model BrandBrochureUpload {
+  id        String @id @default(cuid())
+  sessionId String
+  session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  fileName         String
+  fileUrl          String
+  storagePath      String
+  mimeType         String
+  fileSize         Int              @default(0)
+  extractedText    String?          // Raw text from extraction
+  extractionMethod String           @default("manual") // "ocr_vision" | "pdf_parse" | "manual"
+  confidence       Float?           // Extraction confidence 0-1
+
+  uploadedAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@map("iso_brand_brochure_uploads")
   @@schema("isysocial")
 }
 

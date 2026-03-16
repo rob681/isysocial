@@ -4,17 +4,25 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Topbar } from "@/components/layout/topbar";
+import { BrochurePathSelector } from "@/components/brand/brochure-path-selector";
+import { BrochureDocumentUploader } from "@/components/brand/brochure-document-uploader";
 import { BrochureGuidedQuestionnaire } from "@/components/brand/brochure-guided-questionnaire";
-import { BrochureFieldEditor } from "@/components/brand/brochure-field-editor";
+import { BrochureDynamicFieldRenderer } from "@/components/brand/brochure-dynamic-field-renderer";
+import { BrochurePreview } from "@/components/brand/brochure-preview";
 import { BrochureProgress } from "@/components/brand/brochure-progress";
+
+type Step = "path-select" | "upload" | "questionnaire" | "fields" | "preview" | "complete";
+type Path = "upload" | "qa" | null;
 
 export default function BrandBrochureGuidedPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentStep, setCurrentStep] = useState<"questionnaire" | "fields" | "complete">("questionnaire");
+  const [currentStep, setCurrentStep] = useState<Step>("path-select");
+  const [selectedPath, setSelectedPath] = useState<Path>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [initialQuestions, setInitialQuestions] = useState<any[]>([]);
 
@@ -32,24 +40,64 @@ export default function BrandBrochureGuidedPage() {
     },
   });
 
+  const generateSchema = trpc.brandBrochure.generateSchema.useMutation({
+    onSuccess: () => {
+      setCurrentStep("fields");
+    },
+    onError: (err) => {
+      toast({ title: "Error al generar campos", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Initialize session on mount
   useEffect(() => {
     initiate.mutate();
   }, []);
 
+  const handlePathSelected = (path: "upload" | "qa") => {
+    setSelectedPath(path);
+    if (path === "upload") {
+      setCurrentStep("upload");
+    } else {
+      setCurrentStep("questionnaire");
+    }
+  };
+
+  const handleUploadComplete = () => {
+    setCurrentStep("fields");
+  };
+
+  const handleQuestionnaireComplete = () => {
+    if (!sessionId) return;
+    generateSchema.mutate({ sessionId });
+  };
+
+  const handleFieldsComplete = () => {
+    setCurrentStep("preview");
+  };
+
+  const handlePreviewConfirm = () => {
+    setCurrentStep("complete");
+  };
+
   if (!sessionId) {
     return (
-      <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8">
-        <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="mt-4 text-muted-foreground">Preparando tu brochure guiado...</p>
-        </div>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Brochure Guiado" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8">
+          <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="mt-4 text-muted-foreground">Preparando tu brochure guiado...</p>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Brochure Guiado" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -62,7 +110,9 @@ export default function BrandBrochureGuidedPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Brochure de Tu Marca</h1>
-            <p className="text-sm text-muted-foreground">Guía paso a paso para completar tu identidad de marca</p>
+            <p className="text-sm text-muted-foreground">
+              Guía paso a paso para completar tu identidad de marca
+            </p>
           </div>
         </div>
 
@@ -74,19 +124,44 @@ export default function BrandBrochureGuidedPage() {
 
         {/* Content Area */}
         <Card>
+          {currentStep === "path-select" && (
+            <CardContent className="pt-6">
+              <BrochurePathSelector onSelect={handlePathSelected} />
+            </CardContent>
+          )}
+
+          {currentStep === "upload" && (
+            <BrochureDocumentUploader
+              sessionId={sessionId}
+              onExtractionComplete={handleUploadComplete}
+            />
+          )}
+
           {currentStep === "questionnaire" && (
             <BrochureGuidedQuestionnaire
               sessionId={sessionId}
               initialQuestions={initialQuestions}
-              onComplete={() => setCurrentStep("fields")}
+              onComplete={handleQuestionnaireComplete}
             />
           )}
 
           {currentStep === "fields" && (
-            <BrochureFieldEditor
-              sessionId={sessionId}
-              onComplete={() => setCurrentStep("complete")}
-            />
+            <CardContent className="pt-6">
+              <BrochureDynamicFieldRenderer
+                sessionId={sessionId}
+                onComplete={handleFieldsComplete}
+              />
+            </CardContent>
+          )}
+
+          {currentStep === "preview" && (
+            <CardContent className="pt-6">
+              <BrochurePreview
+                sessionId={sessionId}
+                onConfirm={handlePreviewConfirm}
+                onBack={() => setCurrentStep("fields")}
+              />
+            </CardContent>
           )}
 
           {currentStep === "complete" && (
@@ -107,7 +182,18 @@ export default function BrandBrochureGuidedPage() {
             </CardContent>
           )}
         </Card>
+
+        {/* Loading overlay for schema generation */}
+        {generateSchema.isPending && (
+          <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Generando campos de tu marca...</p>
+            </div>
+          </div>
+        )}
       </div>
+      </main>
     </div>
   );
 }

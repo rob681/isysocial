@@ -47,6 +47,8 @@ export const postsRouter = router({
         });
       }
 
+      const initialStatus = input.initialStatus || "DRAFT";
+
       const post = await ctx.db.post.create({
         data: {
           agencyId,
@@ -61,7 +63,7 @@ export const postsRouter = router({
           revisionsLimit: input.revisionsLimit,
           referenceLink: input.referenceLink || null,
           categoryId: input.categoryId || null,
-          status: "DRAFT",
+          status: initialStatus,
         },
       });
 
@@ -69,9 +71,9 @@ export const postsRouter = router({
       await ctx.db.postStatusLog.create({
         data: {
           postId: post.id,
-          toStatus: "DRAFT",
+          toStatus: initialStatus,
           changedById: ctx.session.user.id,
-          note: "Post creado",
+          note: initialStatus === "IN_REVIEW" ? "Post creado y enviado para aprobación" : "Post creado",
         },
       });
 
@@ -155,9 +157,10 @@ export const postsRouter = router({
       // Build where clause
       const where: any = { agencyId };
 
-      // Client can only see their own posts
+      // Client can only see their own posts (excluding drafts)
       if (user.role === "CLIENTE" && user.clientProfileId) {
         where.clientId = user.clientProfileId;
+        where.status = { not: "DRAFT" };
       }
 
       // Editor: only assigned clients (unless MANAGE_ALL_CLIENTS permission)
@@ -176,7 +179,17 @@ export const postsRouter = router({
       if (input.clientId) where.clientId = input.clientId;
       if (input.network) where.network = input.network;
       if (input.status) {
-        where.status = Array.isArray(input.status) ? { in: input.status } : input.status;
+        // If client already has a "not DRAFT" filter, combine with requested status
+        if (user.role === "CLIENTE") {
+          const statuses = Array.isArray(input.status) ? input.status : [input.status];
+          // Exclude DRAFT from any client-requested status filter
+          const filtered = statuses.filter((s) => s !== "DRAFT");
+          if (filtered.length > 0) {
+            where.status = filtered.length === 1 ? filtered[0] : { in: filtered };
+          }
+        } else {
+          where.status = Array.isArray(input.status) ? { in: input.status } : input.status;
+        }
       }
       if (input.categoryId) where.categoryId = input.categoryId;
 
