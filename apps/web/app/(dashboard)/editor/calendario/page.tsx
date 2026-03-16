@@ -24,6 +24,7 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, HolidayRegion } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
+import { Topbar } from "@/components/layout/topbar";
 
 const MONTH_NAMES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -102,7 +103,9 @@ export default function EditorCalendarioPage() {
   const dayPosts = selectedDay && data?.posts?.[selectedDay] ? data.posts[selectedDay] : [];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Calendario" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -308,6 +311,7 @@ export default function EditorCalendarioPage() {
           </div>
         </SheetContent>
       </Sheet>
+      </main>
     </div>
   );
 }

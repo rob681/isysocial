@@ -33,6 +33,7 @@ import {
 import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
 import { ContentGrid } from "@/components/content/content-grid";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function EditorContenidoPage() {
   const [search, setSearch] = useState("");
@@ -59,7 +60,9 @@ export default function EditorContenidoPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Contenido" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -250,6 +253,7 @@ export default function EditorContenidoPage() {
           )}
         </div>
       )}
+      </main>
     </div>
   );
 }

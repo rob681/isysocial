@@ -33,6 +33,8 @@ import {
   FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AIBrandAssistant } from "@/components/brand/ai-brand-assistant";
+import { Topbar } from "@/components/layout/topbar";
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -130,6 +132,7 @@ export default function ClienteBrandKitPage() {
   const [initialized, setInitialized] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
 
   // ── Queries & mutations ──
   const { data, isLoading } = trpc.clients.getBrandKit.useQuery(
@@ -279,15 +282,23 @@ export default function ClienteBrandKitPage() {
   // ── Loading state ──
   if (isLoading || !data) {
     return (
-      <div className="space-y-6 max-w-3xl mx-auto">
-        <Skeleton className="h-12 w-64" />
-        <Skeleton className="h-[200px] w-full rounded-2xl" />
-        <Skeleton className="h-[200px] w-full rounded-2xl" />
+      <div className="flex flex-col flex-1">
+        <Topbar title="Tu marca" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="space-y-6 max-w-3xl mx-auto">
+            <Skeleton className="h-12 w-64" />
+            <Skeleton className="h-[200px] w-full rounded-2xl" />
+            <Skeleton className="h-[200px] w-full rounded-2xl" />
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
+    <div className="flex flex-col flex-1">
+      <Topbar title="Tu marca" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
     <div className="max-w-3xl mx-auto pb-12 print:pb-0 print:max-w-none">
       {/* ──── Page Header ──── */}
       <div className="mb-8">
@@ -302,15 +313,26 @@ export default function ClienteBrandKitPage() {
               contenido
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            className="gap-2 print:hidden"
-          >
-            <Printer className="h-4 w-4" />
-            Descargar guia
-          </Button>
+          <div className="flex items-center gap-2 print:hidden">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAiAssistantOpen(true)}
+              className="gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400 dark:hover:bg-purple-950/30"
+            >
+              <Sparkles className="h-4 w-4" />
+              Asistente IA
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Descargar guia
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -628,6 +650,46 @@ export default function ClienteBrandKitPage() {
         </div>
       </div>
 
+      {/* ──── AI Brand Assistant ──── */}
+      <AIBrandAssistant
+        open={aiAssistantOpen}
+        onClose={() => setAiAssistantOpen(false)}
+        companyName={data?.companyName || ""}
+        existingValues={{
+          missionStatement,
+          targetAudience,
+          brandValues,
+          toneOfVoice,
+          styleNotes,
+          doAndDonts,
+        }}
+        onInsert={(field, value) => {
+          switch (field) {
+            case "missionStatement":
+              setMissionStatement(value);
+              break;
+            case "targetAudience":
+              setTargetAudience(value);
+              break;
+            case "brandValues":
+              setBrandValues(value);
+              break;
+            case "styleNotes":
+              setStyleNotes(value);
+              break;
+            case "doAndDonts":
+              setDoAndDonts(value);
+              break;
+            case "tagline":
+              // Insert tagline into styleNotes as a suggestion
+              setStyleNotes((prev) =>
+                prev ? `${prev}\n\nTagline sugerido: ${value}` : `Tagline sugerido: ${value}`
+              );
+              break;
+          }
+        }}
+      />
+
       {/* ──── PRINT STYLES ──── */}
       <style jsx global>{`
         @media print {
@@ -656,6 +718,8 @@ export default function ClienteBrandKitPage() {
           }
         }
       `}</style>
+    </div>
+      </main>
     </div>
   );
 }

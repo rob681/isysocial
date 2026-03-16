@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Save, Lightbulb, Upload, X, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function ClienteNuevaIdeaPage() {
   const router = useRouter();
@@ -90,7 +91,10 @@ export default function ClienteNuevaIdeaPage() {
   const isSaving = createIdea.isLoading;
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Nueva idea" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
@@ -214,6 +218,8 @@ export default function ClienteNuevaIdeaPage() {
           </div>
         </div>
       </form>
+    </div>
+      </main>
     </div>
   );
 }

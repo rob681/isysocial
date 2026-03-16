@@ -34,6 +34,8 @@ import type { MockupMedia } from "@/components/mockups/types";
 import { useToast } from "@/hooks/use-toast";
 import { getTimezoneShortLabel } from "@/lib/utils";
 import { RevisionHistory } from "@/components/post-editor/revision-history";
+import { PublishPostDialog } from "@/components/publish-post-dialog";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function EditorPostDetailPage() {
   const params = useParams();
@@ -44,8 +46,11 @@ export default function EditorPostDetailPage() {
   const [comment, setComment] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [statusNote, setStatusNote] = useState("");
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   const userRole = (session?.user as any)?.role as Role;
+  const editorPermissions = (session?.user as any)?.permissions as string[] | undefined;
+  const canPublish = userRole === "ADMIN" || editorPermissions?.includes("PUBLISH_POSTS");
 
   const { data: post, isLoading, refetch } = trpc.posts.get.useQuery({ id: postId });
   const { data: agencyTimezone } = trpc.agencies.getTimezone.useQuery();
@@ -69,23 +74,33 @@ export default function EditorPostDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="flex gap-6">
-          <Skeleton className="flex-1 h-96" />
-          <Skeleton className="w-[380px] h-96" />
-        </div>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle de publicación" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="max-w-6xl mx-auto space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <div className="flex gap-6">
+              <Skeleton className="flex-1 h-96" />
+              <Skeleton className="w-[380px] h-96" />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!post) {
     return (
-      <div className="text-center py-16">
-        <p className="text-muted-foreground">Publicación no encontrada</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          Volver
-        </Button>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle de publicación" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="text-center py-16">
+            <p className="text-muted-foreground">Publicación no encontrada</p>
+            <Button variant="outline" className="mt-4" onClick={() => router.back()}>
+              Volver
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -102,7 +117,10 @@ export default function EditorPostDetailPage() {
   }));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Detalle de publicación" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -130,6 +148,16 @@ export default function EditorPostDetailPage() {
             </Badge>
           </div>
         </div>
+        {canPublish && (post.status === "APPROVED" || post.status === "SCHEDULED") && (
+          <Button
+            size="sm"
+            className="gradient-primary text-white"
+            onClick={() => setPublishDialogOpen(true)}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Publicar ahora
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -426,6 +454,21 @@ export default function EditorPostDetailPage() {
           </div>
         </div>
       </div>
+
+      {publishDialogOpen && (
+        <PublishPostDialog
+          postId={post.id}
+          postTitle={post.title || post.copy?.slice(0, 60) || "Sin título"}
+          network={post.network}
+          postType={post.postType}
+          clientId={post.clientId}
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          onPublished={() => refetch()}
+        />
+      )}
+    </div>
+      </main>
     </div>
   );
 }

@@ -32,6 +32,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Topbar } from "@/components/layout/topbar";
 
 const TONE_OPTIONS = [
   { value: "formal", label: "Formal" },
@@ -123,15 +124,23 @@ export default function BrandKitPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-4xl">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-[400px] w-full" />
+      <div className="flex flex-col flex-1">
+        <Topbar title="Marca del cliente" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="space-y-6 max-w-4xl">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-[400px] w-full" />
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Marca del cliente" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -284,12 +293,12 @@ export default function BrandKitPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Tono de voz</Label>
-                <Select value={toneOfVoice} onValueChange={setToneOfVoice}>
+                <Select value={toneOfVoice || "__none__"} onValueChange={(v) => setToneOfVoice(v === "__none__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona un tono" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin definir</SelectItem>
+                    <SelectItem value="__none__">Sin definir</SelectItem>
                     {TONE_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
                         {opt.label}
@@ -442,6 +451,8 @@ export default function BrandKitPage() {
           </Card>
         </div>
       </div>
+      </div>
+      </main>
     </div>
   );
 }

@@ -392,12 +392,12 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
                 name="categoryId"
                 control={form.control}
                 render={({ field }) => (
-                  <Select value={field.value || ""} onValueChange={field.onChange}>
+                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sin categoría" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sin categoría</SelectItem>
+                      <SelectItem value="__none__">Sin categoría</SelectItem>
                       {categories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.id}>
                           <div className="flex items-center gap-2">

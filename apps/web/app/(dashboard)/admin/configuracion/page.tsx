@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useForm } from "react-hook-form";
+import { useSearchParams } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
 import { trpc } from "@/lib/trpc/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, Facebook, Instagram, Unplug } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -356,6 +359,153 @@ function LogoUploadSection({
   );
 }
 
+/* ─── SocialConnectionsSection ───────────────────────────────────── */
+function SocialConnectionsSection() {
+  const { toast } = useToast();
+  const utils = trpc.useUtils();
+
+  const { data: accounts, isLoading } = trpc.agencies.getSocialAccounts.useQuery();
+
+  const disconnectAccount = trpc.agencies.disconnectSocialAccount.useMutation({
+    onSuccess: () => {
+      toast({ title: "Cuenta desconectada", description: "La cuenta de red social fue desconectada correctamente." });
+      utils.agencies.getSocialAccounts.invalidate();
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const networkIcon = (network: string) => {
+    switch (network) {
+      case "FACEBOOK":
+        return <Facebook className="h-3.5 w-3.5" />;
+      case "INSTAGRAM":
+        return <Instagram className="h-3.5 w-3.5" />;
+      default:
+        return null;
+    }
+  };
+
+  const networkColor = (network: string) => {
+    switch (network) {
+      case "FACEBOOK":
+        return "bg-blue-100 text-blue-700 hover:bg-blue-100";
+      case "INSTAGRAM":
+        return "bg-pink-100 text-pink-700 hover:bg-pink-100";
+      default:
+        return "";
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Share2 className="h-4 w-4" />
+              Conexiones de redes sociales
+            </CardTitle>
+            <CardDescription>
+              Conecta las cuentas de redes sociales de tu agencia para publicar contenido
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Connected accounts list */}
+            {accounts && accounts.length > 0 ? (
+              <div className="space-y-2">
+                {accounts.map((account: any) => (
+                  <div
+                    key={account.id}
+                    className="flex items-center justify-between px-3 py-3 rounded-md border bg-muted/30 group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9">
+                        {account.profilePicUrl ? (
+                          <AvatarImage src={account.profilePicUrl} alt={account.accountName} />
+                        ) : null}
+                        <AvatarFallback className="text-xs">
+                          {account.accountName?.charAt(0)?.toUpperCase() ?? "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">{account.accountName}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 gap-1 ${networkColor(account.network)}`}>
+                            {networkIcon(account.network)}
+                            {account.network}
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            Conectada {new Date(account.connectedAt).toLocaleDateString("es-MX", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        if (confirm("¿Desconectar esta cuenta?")) {
+                          disconnectAccount.mutate({ id: account.id });
+                        }
+                      }}
+                      disabled={disconnectAccount.isLoading}
+                    >
+                      {disconnectAccount.isLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Unplug className="h-3.5 w-3.5 mr-1.5" />
+                          Desconectar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 space-y-2">
+                <Share2 className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  No hay cuentas conectadas. Conecta una cuenta de Meta para empezar a publicar.
+                </p>
+              </div>
+            )}
+
+            {/* Connect Meta button */}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                window.location.href = "/api/social/meta/authorize";
+              }}
+            >
+              <Facebook className="h-4 w-4 mr-2" />
+              Conectar Meta (Facebook e Instagram)
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ─── Timezone options ────────────────────────────────────────────── */
 const TIMEZONES = [
   { value: "America/Mexico_City", label: "Ciudad de M\u00e9xico (GMT-6)" },
@@ -376,9 +526,33 @@ const TIMEZONES = [
 
 /* ─── ConfiguracionPage ──────────────────────────────────────────── */
 export default function ConfiguracionPage() {
+  return (
+    <Suspense fallback={<div className="flex flex-col flex-1"><Topbar title="Configuración" /><main className="flex-1 p-4 md:p-6 lg:p-8"><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-64 w-full" /></main></div>}>
+      <ConfiguracionContent />
+    </Suspense>
+  );
+}
+
+function ConfiguracionContent() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const { data: agency, isLoading } = trpc.agencies.get.useQuery();
   const utils = trpc.useUtils();
+
+  // Handle OAuth redirect params
+  useEffect(() => {
+    const socialParam = searchParams.get("social");
+    if (socialParam === "success") {
+      toast({ title: "Cuenta conectada", description: "La cuenta de red social se conectó correctamente." });
+      utils.agencies.getSocialAccounts.invalidate();
+      // Clean up URL params
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (socialParam === "error") {
+      const errorMessage = searchParams.get("message") || "No se pudo conectar la cuenta. Intenta de nuevo.";
+      toast({ title: "Error de conexión", description: decodeURIComponent(errorMessage), variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchParams, toast, utils]);
 
   const updateAgency = trpc.agencies.update.useMutation({
     onSuccess: () => {
@@ -577,6 +751,9 @@ export default function ConfiguracionPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Social connections */}
+            <SocialConnectionsSection />
 
             {/* Categories */}
             <CategoriesSection />

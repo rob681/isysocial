@@ -33,6 +33,7 @@ import {
 import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
 import { ContentGrid } from "@/components/content/content-grid";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function ClienteContenidoPage() {
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
@@ -61,7 +62,9 @@ export default function ClienteContenidoPage() {
   const pendingCount = data?.posts.filter((p) => p.status === "IN_REVIEW").length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Contenido" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Mis Publicaciones</h1>
@@ -256,6 +259,7 @@ export default function ClienteContenidoPage() {
           )}
         </div>
       )}
+      </main>
     </div>
   );
 }

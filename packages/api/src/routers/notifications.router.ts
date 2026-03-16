@@ -60,4 +60,51 @@ export const notificationsRouter = router({
     });
     return { count };
   }),
+
+  // ─── Register FCM Token ─────────────────────────────────────────────────
+  registerFCMToken: protectedProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const user = await ctx.db.user.findUnique({
+        where: { id: userId },
+        select: { fcmTokens: true },
+      });
+
+      if (!user) return { success: false };
+
+      // Avoid duplicates, max 5 tokens per user
+      if (user.fcmTokens.includes(input.token)) {
+        return { success: true };
+      }
+
+      const tokens = [...user.fcmTokens, input.token].slice(-5);
+      await ctx.db.user.update({
+        where: { id: userId },
+        data: { fcmTokens: tokens },
+      });
+
+      return { success: true };
+    }),
+
+  // ─── Unregister FCM Token ───────────────────────────────────────────────
+  unregisterFCMToken: protectedProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const user = await ctx.db.user.findUnique({
+        where: { id: userId },
+        select: { fcmTokens: true },
+      });
+
+      if (!user) return { success: false };
+
+      const tokens = user.fcmTokens.filter((t) => t !== input.token);
+      await ctx.db.user.update({
+        where: { id: userId },
+        data: { fcmTokens: tokens },
+      });
+
+      return { success: true };
+    }),
 });

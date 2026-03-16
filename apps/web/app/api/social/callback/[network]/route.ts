@@ -306,11 +306,13 @@ export async function GET(
     }
 
     // ── Step 3: Upsert ClientSocialNetwork ────────────────────────────────────
+    const pageIdForNetwork = pageId || networkEnum; // Use network as fallback
     await db.clientSocialNetwork.upsert({
       where: {
-        clientId_network: {
+        clientId_network_pageId: {
           clientId,
           network: networkEnum as any,
+          pageId: pageIdForNetwork,
         },
       },
       update: {
@@ -318,25 +320,24 @@ export async function GET(
         refreshToken: refreshToken ?? null,
         tokenExpiresAt: tokenExpiresAt ?? null,
         accountId,
-        pageId: pageId ?? null,
+        pageId: pageIdForNetwork,
         accountName,
         profilePic: profilePic ?? null,
         isActive: true,
-        connectedAt: new Date(),
+        assignedAt: new Date(),
         tokenScope: null,
       },
       create: {
         clientId,
         network: networkEnum as any,
+        pageId: pageIdForNetwork,
         accessToken: pageAccessToken ?? accessToken,
         refreshToken: refreshToken ?? null,
         tokenExpiresAt: tokenExpiresAt ?? null,
         accountId,
-        pageId: pageId ?? null,
         accountName,
         profilePic: profilePic ?? null,
         isActive: true,
-        connectedAt: new Date(),
       },
     });
 

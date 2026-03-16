@@ -101,6 +101,7 @@ function timeAgo(date: Date | string): string {
 
 export default function AdminDashboardPage() {
   const { data, isLoading } = trpc.agencies.getDashboardData.useQuery();
+  const { data: guidedReviews, isLoading: guidedReviewsLoading } = trpc.posts.listGuidedReviews.useQuery({ status: "PENDING" });
 
   const stats = data?.stats;
   const pipeline = data?.pipeline ?? [];
@@ -431,6 +432,49 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Guided Reviews */}
+        {!guidedReviewsLoading && guidedReviews && guidedReviews.length > 0 && (
+          <Card className="border-purple-200 dark:border-purple-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-purple-600" />
+                Revisiones guiadas pendientes
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 ml-2">
+                  {guidedReviews.length}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Clientes que han solicitado una sesión de revisión guiada con un creativo
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {guidedReviews.map((review: any) => (
+                  <Link key={review.id} href={`/admin/contenido/${review.post?.id}`}>
+                    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer border border-purple-100 dark:border-purple-900">
+                      <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-950 flex-shrink-0">
+                        <AlertTriangle className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {review.post?.copy?.slice(0, 50) || "Publicación"} — {review.client?.companyName || "Cliente"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Solicitada {timeAgo(review.requestedAt)}
+                          {review.notes && ` · "${review.notes.slice(0, 60)}${review.notes.length > 60 ? "..." : ""}"`}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs text-purple-600 border-purple-200 flex-shrink-0">
+                        Pendiente
+                      </Badge>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Quick actions */}
         <div>

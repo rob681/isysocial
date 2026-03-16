@@ -3,8 +3,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Search, UserCircle, Users, X } from "lucide-react";
+import { Search, UserCircle, Users, X, FileImage, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc/client";
+import { POST_STATUS_LABELS, POST_STATUS_COLORS, NETWORK_LABELS, NETWORK_COLORS } from "@isysocial/shared";
+import type { PostStatus, SocialNetwork } from "@isysocial/shared";
+
+function getRolePrefix(role: string): string {
+  if (role === "ADMIN" || role === "SUPER_ADMIN") return "/admin";
+  if (role === "EDITOR") return "/editor";
+  return "/cliente";
+}
 
 export function GlobalSearch() {
   const router = useRouter();
@@ -17,8 +26,9 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+  const prefix = getRolePrefix(role || "CLIENTE");
 
-  // Search clients (admin only, with debounce built into query)
+  // Search clients (admin only)
   const { data: clients, isFetching: fetchingClients } = trpc.clients.list.useQuery(
     { search: query.trim(), page: 1, limit: 5 },
     { enabled: isAdmin && open && query.trim().length >= 1 }
@@ -30,8 +40,17 @@ export function GlobalSearch() {
     { enabled: isAdmin && open && query.trim().length >= 1 }
   );
 
-  const isFetching = fetchingClients || fetchingEditors;
-  const hasResults = (clients?.clients?.length ?? 0) > 0 || (editors?.editors?.length ?? 0) > 0;
+  // Search posts (all roles)
+  const { data: posts, isFetching: fetchingPosts } = trpc.posts.list.useQuery(
+    { search: query.trim(), page: 1, limit: 5 },
+    { enabled: open && query.trim().length >= 2 }
+  );
+
+  const isFetching = fetchingClients || fetchingEditors || fetchingPosts;
+  const hasClients = isAdmin && (clients?.clients?.length ?? 0) > 0;
+  const hasEditors = isAdmin && (editors?.editors?.length ?? 0) > 0;
+  const hasPosts = (posts?.posts?.length ?? 0) > 0;
+  const hasResults = hasClients || hasEditors || hasPosts;
 
   // Close on outside click
   useEffect(() => {
@@ -102,10 +121,13 @@ export function GlobalSearch() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={isAdmin ? "Buscar clientes o editores..." : "Buscar..."}
+                placeholder="Buscar contenido, clientes, editores..."
                 className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
                 autoFocus
               />
+              {isFetching && query.trim() && (
+                <Loader2 className="h-4 w-4 text-muted-foreground animate-spin flex-shrink-0" />
+              )}
               {query && (
                 <button
                   onClick={() => { setQuery(""); inputRef.current?.focus(); }}
@@ -126,19 +148,67 @@ export function GlobalSearch() {
             <div className="max-h-80 overflow-y-auto">
               {!query.trim() && (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  Escribe para buscar{isAdmin ? " clientes o editores" : ""}
+                  Escribe para buscar contenido{isAdmin ? ", clientes o editores" : ""}
                 </div>
               )}
 
-              {query.trim() && !hasResults && !isFetching && (
+              {query.trim().length >= 1 && !hasResults && !isFetching && (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No se encontraron resultados para &quot;{query}&quot;
                 </div>
               )}
 
-              {/* Clients */}
-              {isAdmin && (clients?.clients?.length ?? 0) > 0 && (
+              {/* Posts / Content */}
+              {hasPosts && (
                 <div className="p-2">
+                  <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Contenido
+                  </p>
+                  {posts!.posts.map((post) => {
+                    const thumbnail = (post as any).media?.[0]?.fileUrl;
+                    const statusColor = POST_STATUS_COLORS[post.status as PostStatus] || "";
+                    const networkColor = NETWORK_COLORS[post.network as SocialNetwork] || "#888";
+                    return (
+                      <button
+                        key={post.id}
+                        onClick={() => navigateTo(`${prefix}/contenido/${post.id}`)}
+                        className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-accent transition-colors"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          {thumbnail ? (
+                            <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <FileImage className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {post.title || (post as any).copy?.slice(0, 40) || "Sin título"}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full text-white"
+                              style={{ backgroundColor: networkColor }}
+                            >
+                              {NETWORK_LABELS[post.network as SocialNetwork]}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {(post as any).client?.companyName}
+                            </span>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className={`text-[10px] ${statusColor}`}>
+                          {POST_STATUS_LABELS[post.status as PostStatus]}
+                        </Badge>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Clients */}
+              {hasClients && (
+                <div className={`p-2 ${hasPosts ? "border-t" : ""}`}>
                   <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Clientes
                   </p>
@@ -161,8 +231,8 @@ export function GlobalSearch() {
               )}
 
               {/* Editors */}
-              {isAdmin && (editors?.editors?.length ?? 0) > 0 && (
-                <div className="p-2 border-t">
+              {hasEditors && (
+                <div className={`p-2 ${hasPosts || hasClients ? "border-t" : ""}`}>
                   <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Editores
                   </p>
@@ -181,12 +251,6 @@ export function GlobalSearch() {
                       </div>
                     </button>
                   ))}
-                </div>
-              )}
-
-              {isFetching && query.trim() && (
-                <div className="px-4 py-3 text-center text-xs text-muted-foreground">
-                  Buscando...
                 </div>
               )}
             </div>

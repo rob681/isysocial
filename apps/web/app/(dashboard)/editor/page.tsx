@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Topbar } from "@/components/layout/topbar";
 import { trpc } from "@/lib/trpc/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,9 @@ export default function EditorDashboardPage() {
   const attention = data?.postsNeedingAttention ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Dashboard" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Welcome */}
       <div className="flex items-center justify-between">
         <div>
@@ -382,6 +385,7 @@ export default function EditorDashboardPage() {
           </Card>
         </Link>
       </div>
+      </main>
     </div>
   );
 }

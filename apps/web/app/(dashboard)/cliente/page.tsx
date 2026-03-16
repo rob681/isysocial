@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Topbar } from "@/components/layout/topbar";
 import { trpc } from "@/lib/trpc/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,9 @@ export default function ClienteDashboardPage() {
   const publishedCount = allPosts?.posts.filter((p) => p.status === "PUBLISHED").length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Dashboard" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Welcome */}
       <div>
         <h1 className="text-2xl font-bold">Bienvenido, {name} 👋</h1>
@@ -324,6 +327,7 @@ export default function ClienteDashboardPage() {
           </Card>
         </Link>
       </div>
+      </main>
     </div>
   );
 }

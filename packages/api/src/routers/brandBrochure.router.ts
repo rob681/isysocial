@@ -13,13 +13,26 @@ export const brandBrochureRouter = router({
 
     const clientId = session.clientProfileId;
 
-    // Check if session already exists
-    const existing = await ctx.db.brandBrochureSession.findUnique({
-      where: { clientId },
-    });
+    // Delete any existing session and start fresh
+    try {
+      const existing = await ctx.db.brandBrochureSession.findUnique({
+        where: { clientId },
+      });
 
-    if (existing && existing.status === "IN_PROGRESS") {
-      return { sessionId: existing.id, status: "IN_PROGRESS" };
+      if (existing) {
+        await ctx.db.brandBrochureQuestion.deleteMany({
+          where: { sessionId: existing.id },
+        });
+        await ctx.db.brandBrochureField.deleteMany({
+          where: { sessionId: existing.id },
+        });
+        await ctx.db.brandBrochureSession.delete({
+          where: { id: existing.id },
+        });
+      }
+    } catch (err) {
+      // Ignore cleanup errors
+      console.error("Error cleaning up session:", err);
     }
 
     // Create new session

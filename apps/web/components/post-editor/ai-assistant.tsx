@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 const TONE_OPTIONS = [
-  { value: "", label: "Sin preferencia" },
+  { value: "__none__", label: "Sin preferencia" },
   { value: "formal", label: "Formal" },
   { value: "informal", label: "Informal" },
   { value: "playful", label: "Divertido" },
@@ -183,7 +183,7 @@ export function AiAssistant({ onInsert, network, clientId, onClose }: AiAssistan
             {/* Tone selector */}
             <div className="space-y-1.5">
               <Label className="text-xs">Tono de escritura</Label>
-              <Select value={tone} onValueChange={setTone}>
+              <Select value={tone || "__none__"} onValueChange={(v) => setTone(v === "__none__" ? "" : v)}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Sin preferencia" />
                 </SelectTrigger>

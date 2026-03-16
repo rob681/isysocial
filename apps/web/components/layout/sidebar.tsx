@@ -67,10 +67,18 @@ const adminToolsNav: NavItem[] = [
   { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" />, tourId: "sidebar-settings" },
 ];
 
-const clientSubItems = [
+const clientSubItems: {
+  label: string;
+  icon: React.ReactNode;
+  tourId?: string;
+  segment?: string;
+  hrefBuilder?: (prefix: string, id: string) => string;
+  activeSegment?: string;
+}[] = [
   { label: "Calendario", segment: "calendario", icon: <Calendar className="h-4 w-4" />, tourId: "sidebar-calendar" },
   { label: "Contenido", segment: "contenido", icon: <FileImage className="h-4 w-4" />, tourId: "sidebar-content" },
   { label: "Ideas", segment: "ideas", icon: <Lightbulb className="h-4 w-4" /> },
+  { label: "Mi Marca", hrefBuilder: (prefix: string, id: string) => `${prefix}/clientes/${id}/marca`, activeSegment: "marca", icon: <Palette className="h-4 w-4" />, tourId: "sidebar-brand" },
 ];
 
 // ─── Editor Navigation ────────────────────────────────────────────────────
@@ -652,13 +660,16 @@ function ClientItem({
       {isExpanded && (
         <div className="ml-4 pl-3 border-l border-border/60 mt-0.5 mb-1 space-y-0.5">
           {clientSubItems.map((sub) => {
-            const href = `${rolePrefix}/${sub.segment}?clientId=${client.id}`;
+            const href = sub.hrefBuilder
+              ? sub.hrefBuilder(rolePrefix, client.id)
+              : `${rolePrefix}/${sub.segment}?clientId=${client.id}`;
+            const activeSegment = sub.activeSegment || sub.segment;
             const isSubActive =
-              pathname.includes(`/${sub.segment}`) && activeClientId === client.id;
+              pathname.includes(`/${activeSegment}`) && activeClientId === client.id;
 
             return (
               <Link
-                key={sub.segment}
+                key={sub.segment || sub.activeSegment}
                 href={href}
                 onClick={onNavigate}
                 className={cn(

@@ -51,6 +51,7 @@ import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { exportToCSV } from "@/lib/export-csv";
 import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
 import { ContentGrid } from "@/components/content/content-grid";
+import { Topbar } from "@/components/layout/topbar";
 
 /* ─── Bulk Action Bar ─────────────────────────────────────────────── */
 function BulkActionBar({
@@ -260,7 +261,9 @@ export default function ContenidoPage() {
   const allSelected = data?.posts?.length ? data.posts.every((p) => selectedIds.has(p.id)) : false;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Contenido" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
         <BulkActionBar
@@ -591,6 +594,7 @@ export default function ContenidoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </main>
     </div>
   );
 }

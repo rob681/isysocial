@@ -32,6 +32,7 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function ArchivoPage() {
   const [search, setSearch] = useState("");
@@ -57,7 +58,9 @@ export default function ArchivoPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Archivo" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -287,6 +290,7 @@ export default function ArchivoPage() {
           )}
         </div>
       )}
+      </main>
     </div>
   );
 }

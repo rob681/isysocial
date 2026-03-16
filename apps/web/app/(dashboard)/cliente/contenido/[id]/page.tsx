@@ -42,6 +42,7 @@ import type { SocialNetwork, PostStatus, PostType, Role } from "@isysocial/share
 import type { MockupMedia } from "@/components/mockups/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn, getTimezoneShortLabel } from "@/lib/utils";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function ClientePostDetailPage() {
   const params = useParams();
@@ -53,6 +54,9 @@ export default function ClientePostDetailPage() {
   const [changesNote, setChangesNote] = useState("");
   const [showChangesForm, setShowChangesForm] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [lastRevisionWarningOpen, setLastRevisionWarningOpen] = useState(false);
+  const [guidedReviewDialogOpen, setGuidedReviewDialogOpen] = useState(false);
+  const [guidedReviewNotes, setGuidedReviewNotes] = useState("");
 
   const userRole = (session?.user as any)?.role as Role;
 
@@ -61,14 +65,29 @@ export default function ClientePostDetailPage() {
 
   const updateStatus = trpc.posts.updateStatus.useMutation({
     onSuccess: (_, variables) => {
-      if (variables.toStatus === "APPROVED") {
+      setChangesNote("");
+      setShowChangesForm(false);
+      refetch();
+
+      // Show special alert if post was approved and has scheduledAt
+      if (variables.toStatus === "APPROVED" && post?.scheduledAt) {
+        const scheduledDate = new Date(post.scheduledAt).toLocaleDateString("es-MX", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        toast({
+          title: "✅ Publicación aprobada",
+          description: `Tu contenido se publicará automáticamente el ${scheduledDate}`,
+          variant: "default",
+        });
+      } else if (variables.toStatus === "APPROVED") {
         toast({ title: "✅ Publicación aprobada", description: "Tu agencia ha sido notificada." });
       } else {
         toast({ title: "Cambios solicitados", description: "Tu agencia revisará tus comentarios." });
       }
-      setChangesNote("");
-      setShowChangesForm(false);
-      refetch();
     },
     onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -81,25 +100,48 @@ export default function ClientePostDetailPage() {
     onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const requestGuidedReview = trpc.posts.requestGuidedReview.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Revisión guiada solicitada",
+        description: "Tu agencia se pondrá en contacto contigo pronto para agendar la sesión.",
+      });
+      setGuidedReviewDialogOpen(false);
+      setGuidedReviewNotes("");
+      refetch();
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="flex gap-6">
-          <Skeleton className="flex-1 h-96" />
-          <Skeleton className="w-[380px] h-96" />
-        </div>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle de publicación" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="max-w-6xl mx-auto space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <div className="flex gap-6">
+              <Skeleton className="flex-1 h-96" />
+              <Skeleton className="w-[380px] h-96" />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!post) {
     return (
-      <div className="text-center py-16">
-        <p className="text-muted-foreground">Publicación no encontrada</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          Volver
-        </Button>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle de publicación" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="text-center py-16">
+            <p className="text-muted-foreground">Publicación no encontrada</p>
+            <Button variant="outline" className="mt-4" onClick={() => router.back()}>
+              Volver
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -109,6 +151,7 @@ export default function ClientePostDetailPage() {
   const isInReview = post.status === "IN_REVIEW";
   const isClientChanges = post.status === "CLIENT_CHANGES";
   const revisionsExhausted = post.revisionsUsed >= post.revisionsLimit;
+  const revisionsLow = !revisionsExhausted && post.revisionsLimit - post.revisionsUsed === 1;
 
   const mockupMedia: MockupMedia[] = post.media.map((m) => ({
     url: m.fileUrl,
@@ -116,7 +159,10 @@ export default function ClientePostDetailPage() {
   }));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Detalle de publicación" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -163,35 +209,70 @@ export default function ClientePostDetailPage() {
                     {/* Approval Actions */}
                     <div className="flex flex-col gap-3 mt-4">
                       {!showChangesForm ? (
-                        <div className="flex items-center gap-3">
-                          <Button
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                            disabled={updateStatus.isLoading}
-                            onClick={() => setApproveDialogOpen(true)}
-                          >
-                            {updateStatus.isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <ThumbsUp className="h-4 w-4 mr-2" />
-                            )}
-                            Aprobar publicación
-                          </Button>
-
-                          {!revisionsExhausted && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
                             <Button
-                              variant="outline"
-                              className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
-                              onClick={() => setShowChangesForm(true)}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              disabled={updateStatus.isLoading}
+                              onClick={() => setApproveDialogOpen(true)}
                             >
-                              <ThumbsDown className="h-4 w-4 mr-2" />
-                              Solicitar cambios
+                              {updateStatus.isLoading ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : (
+                                <ThumbsUp className="h-4 w-4 mr-2" />
+                              )}
+                              Aprobar publicación
                             </Button>
-                          )}
 
-                          {revisionsExhausted && (
-                            <p className="text-xs text-orange-600 flex items-center gap-1">
+                            {!revisionsExhausted && (
+                              <Button
+                                variant="outline"
+                                className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                                onClick={() => {
+                                  if (revisionsLow) {
+                                    setLastRevisionWarningOpen(true);
+                                  } else {
+                                    setShowChangesForm(true);
+                                  }
+                                }}
+                              >
+                                <ThumbsDown className="h-4 w-4 mr-2" />
+                                Solicitar cambios
+                              </Button>
+                            )}
+
+                            {revisionsExhausted && !post.hasRequestedGuidedReview && (
+                              <Button
+                                variant="outline"
+                                className="border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/30"
+                                onClick={() => setGuidedReviewDialogOpen(true)}
+                              >
+                                <Calendar className="h-4 w-4 mr-2" />
+                                Agendar revisión guiada con creativo
+                              </Button>
+                            )}
+
+                            {revisionsExhausted && post.hasRequestedGuidedReview && (
+                              <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                                <CheckCircle className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                                <p className="text-xs text-purple-700 dark:text-purple-400">
+                                  Revisión guiada solicitada. El equipo se contactará pronto para agendar la sesión.
+                                </p>
+                              </div>
+                            )}
+
+                            {revisionsExhausted && !post.hasRequestedGuidedReview && (
+                              <p className="text-xs text-orange-600 flex items-center gap-1">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                Se alcanzó el límite de revisiones ({post.revisionsLimit})
+                              </p>
+                            )}
+                          </div>
+
+                          {revisionsLow && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                               <AlertTriangle className="h-3.5 w-3.5" />
-                              Se alcanzó el límite de revisiones ({post.revisionsLimit})
+                              Te queda solo 1 revisión disponible ({post.revisionsUsed} de {post.revisionsLimit} usadas)
                             </p>
                           )}
                         </div>
@@ -339,85 +420,7 @@ export default function ClientePostDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Comments */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <MessageCircle className="h-4 w-4" />
-                Comentarios ({post.comments.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {post.comments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay comentarios aún
-                </p>
-              ) : (
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {post.comments.map((c) => (
-                    <div
-                      key={c.id}
-                      className="flex gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        {c.author.avatarUrl ? (
-                          <img src={c.author.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                          <span className="text-xs font-bold text-primary">
-                            {c.author.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{c.author.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleDateString("es", {
-                              day: "numeric",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-sm mt-1">{c.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add comment */}
-              <div className="space-y-2 pt-2 border-t">
-                <div className="flex items-center gap-3">
-                  <Textarea
-                    placeholder="Escribe un comentario..."
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    rows={2}
-                    className="resize-none flex-1"
-                  />
-                  <Button
-                    size="icon"
-                    disabled={!comment.trim() || addComment.isLoading}
-                    onClick={() =>
-                      addComment.mutate({
-                        postId: post.id,
-                        content: comment.trim(),
-                        isInternal: false,
-                      })
-                    }
-                  >
-                    {addComment.isLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Comments section removed — comments are internal-only for team use */}
 
           {/* Status timeline */}
           <Card>
@@ -510,6 +513,100 @@ export default function ClientePostDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Last Revision Warning Dialog */}
+      <Dialog open={lastRevisionWarningOpen} onOpenChange={setLastRevisionWarningOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="h-5 w-5" />
+              Última revisión disponible
+            </DialogTitle>
+            <DialogDescription className="text-sm pt-2">
+              Esta es tu <strong className="text-foreground">última revisión</strong> para esta publicación.
+              Has usado {post.revisionsUsed} de {post.revisionsLimit} revisiones permitidas.
+              <br /><br />
+              Si necesitas más cambios después de esta revisión, podrás solicitar una
+              <strong className="text-foreground"> revisión guiada con un creativo</strong> de tu agencia.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setLastRevisionWarningOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              className="border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={() => {
+                setLastRevisionWarningOpen(false);
+                setShowChangesForm(true);
+              }}
+            >
+              <ThumbsDown className="h-4 w-4 mr-2" />
+              Entendido, solicitar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Guided Review Request Dialog */}
+      <Dialog open={guidedReviewDialogOpen} onOpenChange={setGuidedReviewDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-purple-600" />
+              Agendar revisión guiada
+            </DialogTitle>
+            <DialogDescription className="text-sm pt-2">
+              Has agotado tus revisiones para esta publicación. Puedes solicitar una
+              sesión de revisión guiada con un creativo de tu agencia para resolver
+              los cambios pendientes juntos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label className="text-sm font-medium">
+              Notas o cambios que necesitas (opcional)
+            </label>
+            <Textarea
+              placeholder="Describe brevemente qué cambios necesitas o qué aspectos quieres revisar..."
+              value={guidedReviewNotes}
+              onChange={(e) => setGuidedReviewNotes(e.target.value)}
+              rows={4}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setGuidedReviewDialogOpen(false);
+                setGuidedReviewNotes("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              disabled={requestGuidedReview.isLoading}
+              onClick={() => {
+                requestGuidedReview.mutate({
+                  postId: post.id,
+                  notes: guidedReviewNotes.trim() || undefined,
+                });
+              }}
+            >
+              {requestGuidedReview.isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Solicitar revisión guiada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+      </main>
     </div>
   );
 }

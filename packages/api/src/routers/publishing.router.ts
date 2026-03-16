@@ -10,6 +10,7 @@ import {
   adminOrPermissionProcedure,
 } from "../trpc";
 import { publishToNetwork } from "../lib/publishers/index";
+import type { SocialNetwork } from "@isysocial/db";
 
 export const publishingRouter = router({
   // ─── Get network connection status for a client ───────────────────────────
@@ -27,8 +28,26 @@ export const publishingRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado" });
       }
 
-      const networks = await ctx.db.clientSocialNetwork.findMany({
+      // Fetch client-level networks
+      const clientNetworks = await ctx.db.clientSocialNetwork.findMany({
         where: { clientId: input.clientId },
+        select: {
+          id: true,
+          network: true,
+          accountName: true,
+          profilePic: true,
+          isActive: true,
+          accessToken: true,
+          accountId: true,
+          pageId: true,
+          assignedAt: true,
+          tokenExpiresAt: true,
+        },
+      });
+
+      // Fetch agency-level accounts
+      const agencyAccounts = await ctx.db.agencySocialAccount.findMany({
+        where: { agencyId, isActive: true },
         select: {
           id: true,
           network: true,
@@ -43,16 +62,31 @@ export const publishingRouter = router({
         },
       });
 
-      return networks.map((n) => ({
+      const clientResults = clientNetworks.map((n) => ({
         id: n.id,
         network: n.network,
         connected: !!n.accessToken && n.isActive,
         accountName: n.accountName,
         profilePic: n.profilePic,
-        connectedAt: n.connectedAt,
+        assignedAt: n.assignedAt,
         expiresAt: n.tokenExpiresAt,
         hasPageId: !!n.pageId,
+        source: "client" as const,
       }));
+
+      const agencyResults = agencyAccounts.map((n) => ({
+        id: n.id,
+        network: n.network,
+        connected: !!n.accessToken && n.isActive,
+        accountName: n.accountName,
+        profilePic: n.profilePic,
+        assignedAt: n.connectedAt,
+        expiresAt: n.tokenExpiresAt,
+        hasPageId: !!n.pageId,
+        source: "agency" as const,
+      }));
+
+      return [...clientResults, ...agencyResults];
     }),
 
   // ─── Publish a post to one or more networks ───────────────────────────────
@@ -60,7 +94,10 @@ export const publishingRouter = router({
     .input(
       z.object({
         postId: z.string(),
-        networkIds: z.array(z.string()).min(1),
+        networkIds: z.array(z.string()).default([]),
+        agencyNetworkIds: z.array(z.string()).default([]),
+      }).refine((d) => d.networkIds.length > 0 || d.agencyNetworkIds.length > 0, {
+        message: "Debe seleccionar al menos una red social",
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -73,13 +110,15 @@ export const publishingRouter = router({
           media: { orderBy: { sortOrder: "asc" } },
           client: {
             include: {
-              socialNetworks: {
-                where: {
-                  id: { in: input.networkIds },
-                  isActive: true,
-                  accessToken: { not: null },
-                },
-              },
+              socialNetworks: input.networkIds.length > 0
+                ? {
+                    where: {
+                      id: { in: input.networkIds },
+                      isActive: true,
+                      accessToken: { not: null },
+                    },
+                  }
+                : false,
             },
           },
         },
@@ -96,6 +135,33 @@ export const publishingRouter = router({
         });
       }
 
+      // Fetch agency accounts if needed
+      let agencyAccounts: {
+        id: string;
+        network: SocialNetwork;
+        accountName: string;
+        accountId: string;
+        accessToken: string;
+        pageId: string | null;
+      }[] = [];
+      if (input.agencyNetworkIds.length > 0) {
+        agencyAccounts = await ctx.db.agencySocialAccount.findMany({
+          where: {
+            id: { in: input.agencyNetworkIds },
+            agencyId,
+            isActive: true,
+          },
+          select: {
+            id: true,
+            network: true,
+            accountName: true,
+            accountId: true,
+            accessToken: true,
+            pageId: true,
+          },
+        });
+      }
+
       const mediaUrls = post.media.map((m) => m.fileUrl);
       const results: {
         networkId: string;
@@ -103,12 +169,15 @@ export const publishingRouter = router({
         status: "SUCCESS" | "FAILED" | "SKIPPED";
         platformUrl?: string;
         error?: string;
+        source: "client" | "agency";
       }[] = [];
 
       let anySuccess = false;
 
+      // ── Publish to client-level networks ──
+      const clientSocialNetworks = post.client.socialNetworks ?? [];
       for (const networkId of input.networkIds) {
-        const sn = post.client.socialNetworks.find((n) => n.id === networkId);
+        const sn = clientSocialNetworks.find((n) => n.id === networkId);
 
         if (!sn) {
           results.push({
@@ -116,6 +185,7 @@ export const publishingRouter = router({
             network: networkId,
             status: "SKIPPED",
             error: "Red social no conectada o token no disponible",
+            source: "client",
           });
           continue;
         }
@@ -131,7 +201,6 @@ export const publishingRouter = router({
           },
         });
 
-        // Publish
         const publishResult = await publishToNetwork({
           network: sn.network,
           copy: post.copy ?? "",
@@ -143,7 +212,6 @@ export const publishingRouter = router({
           pageId: sn.pageId ?? undefined,
         });
 
-        // Update log
         await ctx.db.postPublishLog.update({
           where: { id: log.id },
           data: {
@@ -163,6 +231,67 @@ export const publishingRouter = router({
           status: publishResult.success ? "SUCCESS" : "FAILED",
           platformUrl: publishResult.platformUrl,
           error: publishResult.error,
+          source: "client",
+        });
+      }
+
+      // ── Publish to agency-level networks ──
+      for (const agencyNetworkId of input.agencyNetworkIds) {
+        const sn = agencyAccounts.find((a) => a.id === agencyNetworkId);
+
+        if (!sn) {
+          results.push({
+            networkId: agencyNetworkId,
+            network: agencyNetworkId,
+            status: "SKIPPED",
+            error: "Cuenta de agencia no encontrada o inactiva",
+            source: "agency",
+          });
+          continue;
+        }
+
+        // Create PENDING log with agencyAccountId
+        const log = await ctx.db.postPublishLog.create({
+          data: {
+            postId: post.id,
+            agencyAccountId: sn.id,
+            network: sn.network,
+            status: "PENDING",
+            requestedById: ctx.session.user.id,
+          },
+        });
+
+        const publishResult = await publishToNetwork({
+          network: sn.network,
+          copy: post.copy ?? "",
+          hashtags: post.hashtags ?? "",
+          mediaUrls,
+          postType: post.postType,
+          accountId: sn.accountId,
+          accessToken: sn.accessToken,
+          pageId: sn.pageId ?? undefined,
+        });
+
+        await ctx.db.postPublishLog.update({
+          where: { id: log.id },
+          data: {
+            status: publishResult.success ? "SUCCESS" : "FAILED",
+            platformPostId: publishResult.platformPostId ?? null,
+            platformUrl: publishResult.platformUrl ?? null,
+            errorMessage: publishResult.error ?? null,
+            publishedAt: publishResult.success ? new Date() : null,
+          },
+        });
+
+        if (publishResult.success) anySuccess = true;
+
+        results.push({
+          networkId: agencyNetworkId,
+          network: sn.network,
+          status: publishResult.success ? "SUCCESS" : "FAILED",
+          platformUrl: publishResult.platformUrl,
+          error: publishResult.error,
+          source: "agency",
         });
       }
 
@@ -209,6 +338,7 @@ export const publishingRouter = router({
         include: {
           requestedBy: { select: { id: true, name: true } },
           socialNetwork: { select: { accountName: true, profilePic: true } },
+          agencyAccount: { select: { accountName: true, profilePic: true } },
         },
       });
     }),
@@ -226,6 +356,7 @@ export const publishingRouter = router({
             include: { media: { orderBy: { sortOrder: "asc" } } },
           },
           socialNetwork: true,
+          agencyAccount: true,
         },
       });
 
@@ -236,8 +367,9 @@ export const publishingRouter = router({
         });
       }
 
-      const sn = log.socialNetwork;
-      if (!sn.accessToken) {
+      // Determine which account to use: agency or client
+      const sn = log.agencyAccount ?? log.socialNetwork;
+      if (!sn || !sn.accessToken) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "La red social no tiene token de acceso. Por favor reconecta la red.",

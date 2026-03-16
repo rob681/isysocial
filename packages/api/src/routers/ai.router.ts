@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure, getAgencyId } from "../trpc";
-import { generateSocialCopy } from "../lib/openai";
+import { generateSocialCopy, generateBrandText } from "../lib/openai";
 
 export const aiRouter = router({
   generateCopy: protectedProcedure
@@ -84,6 +84,73 @@ export const aiRouter = router({
       });
 
       // Increment credit usage
+      await ctx.db.agency.update({
+        where: { id: agencyId },
+        data: { aiCreditsUsed: { increment: 1 } },
+      });
+
+      return {
+        results,
+        creditsUsed: agency.aiCreditsUsed + 1,
+        creditsLimit: agency.aiCreditsLimit,
+      };
+    }),
+
+  // ─── Generate Brand Suggestion ─────────────────────────────────────────
+  generateBrandSuggestion: protectedProcedure
+    .input(
+      z.object({
+        field: z.enum([
+          "missionStatement",
+          "targetAudience",
+          "brandValues",
+          "styleNotes",
+          "doAndDonts",
+          "tagline",
+        ]),
+        brandDescription: z.string().max(500).default(""),
+        companyName: z.string().max(100).default(""),
+        tone: z.string().default(""),
+        existingValues: z.record(z.string()).default({}),
+        versions: z.number().int().min(1).max(3).default(3),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Check credits (same logic as generateCopy)
+      const agency = await ctx.db.agency.findUnique({
+        where: { id: agencyId },
+        select: { aiCreditsUsed: true, aiCreditsLimit: true, aiCreditResetAt: true },
+      });
+      if (!agency) throw new TRPCError({ code: "NOT_FOUND", message: "Agencia no encontrada" });
+
+      const now = new Date();
+      const resetAt = agency.aiCreditResetAt ? new Date(agency.aiCreditResetAt) : null;
+      if (!resetAt || now.getMonth() !== resetAt.getMonth() || now.getFullYear() !== resetAt.getFullYear()) {
+        await ctx.db.agency.update({
+          where: { id: agencyId },
+          data: { aiCreditsUsed: 0, aiCreditResetAt: now },
+        });
+        agency.aiCreditsUsed = 0;
+      }
+
+      if (agency.aiCreditsUsed >= agency.aiCreditsLimit) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `Has alcanzado el límite de ${agency.aiCreditsLimit} créditos de IA este mes`,
+        });
+      }
+
+      const results = await generateBrandText({
+        field: input.field,
+        brandDescription: input.brandDescription,
+        companyName: input.companyName,
+        tone: input.tone,
+        existingValues: input.existingValues,
+        versions: input.versions,
+      });
+
       await ctx.db.agency.update({
         where: { id: agencyId },
         data: { aiCreditsUsed: { increment: 1 } },

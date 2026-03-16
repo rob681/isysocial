@@ -49,7 +49,6 @@ export async function POST(req: NextRequest) {
       pageId: null,
       accountName: null,
       profilePic: null,
-      connectedAt: null,
       isActive: false,
     },
   });

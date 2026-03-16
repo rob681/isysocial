@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Grid3X3, Instagram } from "lucide-react";
 import { InstagramGrid } from "@/components/grid-preview/instagram-grid";
 import { NETWORK_LABELS } from "@isysocial/shared";
+import { Topbar } from "@/components/layout/topbar";
 
 export default function GridPreviewPage() {
   const [selectedClient, setSelectedClient] = useState<string>("");
@@ -27,7 +28,10 @@ export default function GridPreviewPage() {
   ) || [];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Grid Preview" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -66,7 +70,7 @@ export default function GridPreviewPage() {
             </SelectTrigger>
             <SelectContent>
               {eligibleClients.length === 0 ? (
-                <SelectItem value="" disabled>
+                <SelectItem value="__empty__" disabled>
                   No hay clientes con {NETWORK_LABELS[selectedNetwork]}
                 </SelectItem>
               ) : (
@@ -119,6 +123,8 @@ export default function GridPreviewPage() {
           </CardContent>
         </Card>
       )}
+      </div>
+      </main>
     </div>
   );
 }

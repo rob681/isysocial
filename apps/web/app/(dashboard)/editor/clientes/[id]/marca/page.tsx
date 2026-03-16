@@ -18,6 +18,7 @@ import {
   ListChecks,
   Eye,
 } from "lucide-react";
+import { Topbar } from "@/components/layout/topbar";
 
 const TONE_LABELS: Record<string, string> = {
   formal: "Formal",
@@ -38,21 +39,31 @@ export default function EditorBrandKitPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-4xl">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-[400px] w-full" />
+      <div className="flex flex-col flex-1">
+        <Topbar title="Marca del cliente" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="space-y-6 max-w-4xl">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-[400px] w-full" />
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground">Cliente no encontrado</p>
-        <Button variant="ghost" className="mt-4" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Volver
-        </Button>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Marca del cliente" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="flex flex-col items-center justify-center py-20">
+            <p className="text-muted-foreground">Cliente no encontrado</p>
+            <Button variant="ghost" className="mt-4" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -64,7 +75,10 @@ export default function EditorBrandKitPage() {
   const hasStrategy = bk.targetAudience || bk.brandValues || bk.missionStatement || bk.doAndDonts;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Marca del cliente" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -318,6 +332,8 @@ export default function EditorBrandKitPage() {
           </Card>
         </div>
       </div>
+    </div>
+      </main>
     </div>
   );
 }

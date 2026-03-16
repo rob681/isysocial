@@ -194,4 +194,148 @@ export const agenciesRouter = router({
       oldestPending,
     };
   }),
+
+  // ─── Agency Social Accounts ──────────────────────────────────────────────
+
+  /** Returns all agency-level social accounts (Meta pages, IG, etc.) */
+  getSocialAccounts: adminProcedure.query(async ({ ctx }) => {
+    const agencyId = getAgencyId(ctx);
+
+    return ctx.db.agencySocialAccount.findMany({
+      where: { agencyId },
+      orderBy: [{ network: "asc" }, { accountName: "asc" }],
+      select: {
+        id: true,
+        network: true,
+        accountId: true,
+        accountName: true,
+        profilePic: true,
+        pageId: true,
+        tokenExpiresAt: true,
+        isActive: true,
+        connectedAt: true,
+      },
+    });
+  }),
+
+  /** Disconnects (deletes) a specific agency social account */
+  disconnectSocialAccount: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify the account belongs to this agency
+      const account = await ctx.db.agencySocialAccount.findFirst({
+        where: { id: input.id, agencyId },
+      });
+
+      if (!account) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Cuenta social no encontrada",
+        });
+      }
+
+      await ctx.db.agencySocialAccount.delete({
+        where: { id: input.id },
+      });
+
+      return { success: true };
+    }),
+
+  /** Confirms & stores selected Facebook/Instagram pages from Meta OAuth */
+  selectAndConnectPages: adminProcedure
+    .input(
+      z.object({
+        accountIds: z.array(z.string()).min(1, "Debes seleccionar al menos una cuenta"),
+        // The full account data is sent from the client to avoid cookie parsing issues
+        accounts: z.array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            network: z.enum(["FACEBOOK", "INSTAGRAM"]),
+            accessToken: z.string(),
+            profilePic: z.string().nullable(),
+            tokenExpiresAt: z.string().nullable(),
+            linkedPageId: z.string().optional(),
+          })
+        ),
+        timestamp: z.number(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Check if session expired (> 15 minutes)
+      if (Date.now() - input.timestamp > 15 * 60 * 1000) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Sesión expirada. Por favor intenta conectar Meta nuevamente.",
+        });
+      }
+
+      // Filter selected accounts from input
+      const selectedAccounts = input.accounts.filter((acc) =>
+        input.accountIds.includes(acc.id)
+      );
+
+      if (selectedAccounts.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No se encontraron cuentas seleccionadas",
+        });
+      }
+
+      // Store each selected account
+      const connectedAccounts = [];
+
+      for (const account of selectedAccounts) {
+        const upsertedAccount = await ctx.db.agencySocialAccount.upsert({
+          where: {
+            agencyId_network_accountId: {
+              agencyId,
+              network: account.network,
+              accountId: account.id,
+            },
+          },
+          update: {
+            accountName: account.name,
+            accessToken: account.accessToken,
+            tokenExpiresAt: account.tokenExpiresAt
+              ? new Date(account.tokenExpiresAt)
+              : null,
+            profilePic: account.profilePic,
+            pageId: "linkedPageId" in account ? account.linkedPageId : account.id,
+            isActive: true,
+            connectedAt: new Date(),
+          },
+          create: {
+            agencyId,
+            network: account.network,
+            accountId: account.id,
+            accountName: account.name,
+            accessToken: account.accessToken,
+            tokenExpiresAt: account.tokenExpiresAt
+              ? new Date(account.tokenExpiresAt)
+              : null,
+            profilePic: account.profilePic,
+            pageId: "linkedPageId" in account ? account.linkedPageId : account.id,
+            isActive: true,
+            connectedAt: new Date(),
+          },
+        });
+
+        connectedAccounts.push(upsertedAccount);
+      }
+
+      return {
+        success: true,
+        connected: connectedAccounts.length,
+        accounts: connectedAccounts.map((acc) => ({
+          id: acc.id,
+          name: acc.accountName,
+          network: acc.network,
+        })),
+      };
+    }),
 });

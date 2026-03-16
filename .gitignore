@@ -6,3 +6,4 @@ dist
 .env.local
 generated
 *.tsbuildinfo
+.vercel
