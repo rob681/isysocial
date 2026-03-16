@@ -121,16 +121,48 @@ model Agency {
   aiCreditsLimit  Int       @default(1000)
   aiCreditResetAt DateTime?
 
-  users        User[]
-  clients      ClientProfile[]
-  clientGroups ClientGroup[]
-  posts        Post[]
-  ideas        Idea[]
-  categories   PostCategory[]
-  templates    PostTemplate[]
+  users          User[]
+  clients        ClientProfile[]
+  clientGroups   ClientGroup[]
+  posts          Post[]
+  ideas          Idea[]
+  categories     PostCategory[]
+  templates      PostTemplate[]
+  socialAccounts AgencySocialAccount[]
 
-  @@schema("isysocial")
   @@map("iso_agencies")
+  @@schema("isysocial")
+}
+
+// ─── AGENCY SOCIAL ACCOUNTS ──────────────────────────────────────────────────
+
+model AgencySocialAccount {
+  id       String @id @default(cuid())
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  network     SocialNetwork
+  accountName String
+  accountId   String // Platform account ID (Page ID for FB, IG business account ID)
+  profilePic  String?
+  pageId      String? // Facebook Page ID (for publishing)
+
+  accessToken    String    @db.Text
+  refreshToken   String?   @db.Text
+  tokenExpiresAt DateTime?
+  tokenScope     String?
+
+  isActive    Boolean  @default(true)
+  connectedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  publishLogs         PostPublishLog[]
+  clientNetworkLinks  ClientSocialNetwork[]
+
+  @@unique([agencyId, network, accountId])
+  @@index([agencyId])
+  @@map("iso_agency_social_accounts")
+  @@schema("isysocial")
 }
 
 // ─── CLIENT GROUPS ────────────────────────────────────────────────────────────
@@ -148,26 +180,27 @@ model ClientGroup {
   clients ClientProfile[]
 
   @@index([agencyId])
-  @@schema("isysocial")
   @@map("iso_client_groups")
+  @@schema("isysocial")
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
 
 model User {
-  id                   String   @id @default(cuid())
-  email                String   @unique
-  passwordHash         String?
-  name                 String
-  phone                String?
-  avatarUrl            String?
-  role                 Role
-  isActive             Boolean  @default(true)
-  onboardingCompleted  Boolean  @default(false)
-  agencyId             String?
-  agency               Agency?  @relation(fields: [agencyId], references: [id])
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  passwordHash        String?
+  name                String
+  phone               String?
+  avatarUrl           String?
+  role                Role
+  isActive            Boolean  @default(true)
+  onboardingCompleted Boolean  @default(false)
+  fcmTokens           String[] @default([])
+  agencyId            String?
+  agency              Agency?  @relation(fields: [agencyId], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   clientProfile  ClientProfile?
   editorProfile  EditorProfile?
@@ -180,36 +213,38 @@ model User {
   ideas          Idea[]           @relation("UserIdeas")
   publishLogs    PostPublishLog[]
 
-  @@schema("isysocial")
   @@map("iso_users")
+  @@schema("isysocial")
 }
 
 model ClientProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   agencyId    String
-  agency      Agency   @relation(fields: [agencyId], references: [id])
+  agency      Agency       @relation(fields: [agencyId], references: [id])
   groupId     String?
   group       ClientGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   companyName String
   logoUrl     String?
   brandColors Json?
-  brandKit    Json?    // { primaryColor, secondaryColor, accentColor, typography, toneOfVoice, styleNotes }
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  brandKit    Json? // { primaryColor, secondaryColor, accentColor, typography, toneOfVoice, styleNotes }
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  socialNetworks    ClientSocialNetwork[]
-  editorAssignments EditorClientAssignment[]
-  posts             Post[]
-  ideas             Idea[]
-  brandAssets       ClientBrandAsset[]
+  socialNetworks         ClientSocialNetwork[]
+  editorAssignments      EditorClientAssignment[]
+  posts                  Post[]
+  ideas                  Idea[]
+  brandAssets            ClientBrandAsset[]
+  guidedReviewSessions   GuidedReviewSession[]
+  brandBrochureSessions  BrandBrochureSession[]
 
   @@index([agencyId])
   @@index([groupId])
-  @@schema("isysocial")
   @@map("iso_client_profiles")
+  @@schema("isysocial")
 }
 
 model EditorProfile {
@@ -222,8 +257,8 @@ model EditorProfile {
 
   assignedClients EditorClientAssignment[]
 
-  @@schema("isysocial")
   @@map("iso_editor_profiles")
+  @@schema("isysocial")
 }
 
 model EditorClientAssignment {
@@ -235,8 +270,8 @@ model EditorClientAssignment {
   createdAt DateTime      @default(now())
 
   @@unique([editorId, clientId])
-  @@schema("isysocial")
   @@map("iso_editor_client_assignments")
+  @@schema("isysocial")
 }
 
 model ClientSocialNetwork {
@@ -244,70 +279,79 @@ model ClientSocialNetwork {
   clientId    String
   client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
   network     SocialNetwork
+  pageId      String?       // Platform page ID (FB page ID, IG business ID, etc.)
   accountName String?
   profilePic  String?
   isActive    Boolean       @default(true)
   createdAt   DateTime      @default(now())
 
-  // OAuth connection fields
+  // Source: Can be direct OAuth or inherited from agency
+  sourceType      String        @default("agency")  // "agency" or "direct"
+  agencyAccountId String?
+  agencyAccount   AgencySocialAccount? @relation(fields: [agencyAccountId], references: [id], onDelete: SetNull)
+
+  // OAuth connection fields (copy from agency account if inherited)
   accessToken    String?
   refreshToken   String?
   tokenExpiresAt DateTime?
-  accountId      String?    // Platform user/page ID needed for API calls
-  pageId         String?    // Facebook Page ID (Meta uses separate page token)
-  tokenScope     String?    // Granted OAuth scopes (comma-separated)
-  connectedAt    DateTime?
+  accountId      String? // Platform user/page ID needed for API calls
+  tokenScope     String? // Granted OAuth scopes (comma-separated)
+  assignedAt     DateTime @default(now())
 
   publishLogs PostPublishLog[]
 
-  @@unique([clientId, network])
-  @@schema("isysocial")
+  @@unique([clientId, network, pageId]) // Allow multiple pages per network
+  @@index([clientId])
+  @@index([agencyAccountId])
   @@map("iso_client_social_networks")
+  @@schema("isysocial")
 }
 
 // ─── POSTS ────────────────────────────────────────────────────────────────────
 
 model Post {
-  id             String        @id @default(cuid())
-  agencyId       String
-  agency         Agency        @relation(fields: [agencyId], references: [id])
-  clientId       String
-  client         ClientProfile @relation(fields: [clientId], references: [id])
-  editorId       String?
+  id       String        @id @default(cuid())
+  agencyId String
+  agency   Agency        @relation(fields: [agencyId], references: [id])
+  clientId String
+  client   ClientProfile @relation(fields: [clientId], references: [id])
+  editorId String?
 
-  title          String?
-  copy           String?
-  hashtags       String?
-  network        SocialNetwork
-  postType       PostType
+  title    String?
+  copy     String?
+  hashtags String?
+  network  SocialNetwork
+  postType PostType
 
-  status         PostStatus    @default(DRAFT)
-  scheduledAt    DateTime?
-  publishedAt    DateTime?
+  status      PostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
 
-  revisionsUsed  Int           @default(0)
-  revisionsLimit Int           @default(3)
-  referenceLink  String?
+  revisionsUsed            Int     @default(0)
+  revisionsLimit           Int     @default(3)
+  hasRequestedGuidedReview Boolean @default(false)
+  referenceLink            String?
 
-  categoryId     String?
-  category       PostCategory? @relation(fields: [categoryId], references: [id])
-  mirrorGroupId  String?
+  categoryId    String?
+  category      PostCategory? @relation(fields: [categoryId], references: [id])
+  mirrorGroupId String?
 
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  media       PostMedia[]
-  comments    PostComment[]
-  statusLogs  PostStatusLog[]
-  revisions   PostRevision[]
-  publishLogs PostPublishLog[]
+  media              PostMedia[]
+  comments           PostComment[]
+  statusLogs         PostStatusLog[]
+  revisions          PostRevision[]
+  publishLogs        PostPublishLog[]
+  guidedReviewSession GuidedReviewSession?
 
   @@index([agencyId, clientId])
   @@index([agencyId, status])
   @@index([scheduledAt])
   @@index([mirrorGroupId])
-  @@schema("isysocial")
   @@map("iso_posts")
+  @@schema("isysocial")
 }
 
 model PostMedia {
@@ -322,8 +366,8 @@ model PostMedia {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
-  @@schema("isysocial")
   @@map("iso_post_media")
+  @@schema("isysocial")
 }
 
 model PostComment {
@@ -338,23 +382,23 @@ model PostComment {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@schema("isysocial")
   @@map("iso_post_comments")
+  @@schema("isysocial")
 }
 
 model PostStatusLog {
-  id          String     @id @default(cuid())
+  id          String      @id @default(cuid())
   postId      String
-  post        Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post        Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
   fromStatus  PostStatus?
   toStatus    PostStatus
   changedById String
-  changedBy   User       @relation(fields: [changedById], references: [id])
+  changedBy   User        @relation(fields: [changedById], references: [id])
   note        String?
-  changedAt   DateTime   @default(now())
+  changedAt   DateTime    @default(now())
 
-  @@schema("isysocial")
   @@map("iso_post_status_logs")
+  @@schema("isysocial")
 }
 
 model PostRevision {
@@ -370,19 +414,21 @@ model PostRevision {
   createdAt   DateTime @default(now())
 
   @@index([postId])
-  @@schema("isysocial")
   @@map("iso_post_revisions")
+  @@schema("isysocial")
 }
 
 model PostPublishLog {
   id             String              @id @default(cuid())
   postId         String
   post           Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
-  networkId      String
-  socialNetwork  ClientSocialNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  networkId      String?
+  socialNetwork  ClientSocialNetwork? @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  agencyAccountId String?
+  agencyAccount   AgencySocialAccount? @relation(fields: [agencyAccountId], references: [id], onDelete: Cascade)
   network        SocialNetwork
-  platformPostId String?             // ID returned by the platform (FB post ID, tweet ID, etc.)
-  platformUrl    String?             // URL to the published post on the platform
+  platformPostId String? // ID returned by the platform (FB post ID, tweet ID, etc.)
+  platformUrl    String? // URL to the published post on the platform
   status         PublishStatus       @default(PENDING)
   errorMessage   String?
   requestedById  String
@@ -391,20 +437,47 @@ model PostPublishLog {
   publishedAt    DateTime?
 
   @@index([postId])
-  @@schema("isysocial")
   @@map("iso_post_publish_logs")
+  @@schema("isysocial")
+}
+
+// ─── GUIDED REVIEW SESSIONS ──────────────────────────────────────────────────
+
+model GuidedReviewSession {
+  id        String @id @default(cuid())
+  postId    String @unique
+  post      Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  clientId  String
+  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  requestedAt DateTime  @default(now())
+  scheduledAt DateTime?
+  completedAt DateTime?
+
+  status      String    @default("PENDING") // PENDING, SCHEDULED, COMPLETED, CANCELLED
+  notes       String?   @db.Text
+
+  createdBy   String
+  confirmedBy String?
+
+  @@index([postId])
+  @@index([clientId])
+  @@index([status])
+  @@map("iso_guided_review_sessions")
+  @@schema("isysocial")
 }
 
 // ─── IDEAS / BLUEPRINT ────────────────────────────────────────────────────────
 
 model Idea {
-  id              String         @id @default(cuid())
-  agencyId        String
-  agency          Agency         @relation(fields: [agencyId], references: [id])
-  clientId        String?
-  client          ClientProfile? @relation(fields: [clientId], references: [id])
-  createdById     String?
-  createdBy       User?          @relation("UserIdeas", fields: [createdById], references: [id])
+  id          String         @id @default(cuid())
+  agencyId    String
+  agency      Agency         @relation(fields: [agencyId], references: [id])
+  clientId    String?
+  client      ClientProfile? @relation(fields: [clientId], references: [id])
+  createdById String?
+  createdBy   User?          @relation("UserIdeas", fields: [createdById], references: [id])
 
   title           String
   description     String?
@@ -416,16 +489,16 @@ model Idea {
   convertedPostId String?
   isClientIdea    Boolean        @default(false)
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   media    IdeaMedia[]
   links    IdeaLink[]
   comments IdeaComment[]
 
   @@index([agencyId, clientId])
-  @@schema("isysocial")
   @@map("iso_ideas")
+  @@schema("isysocial")
 }
 
 model IdeaMedia {
@@ -439,8 +512,8 @@ model IdeaMedia {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
-  @@schema("isysocial")
   @@map("iso_idea_media")
+  @@schema("isysocial")
 }
 
 model IdeaLink {
@@ -453,8 +526,8 @@ model IdeaLink {
   ogDescription String?
   createdAt     DateTime @default(now())
 
-  @@schema("isysocial")
   @@map("iso_idea_links")
+  @@schema("isysocial")
 }
 
 model IdeaComment {
@@ -466,34 +539,34 @@ model IdeaComment {
   content   String
   createdAt DateTime @default(now())
 
-  @@schema("isysocial")
   @@map("iso_idea_comments")
+  @@schema("isysocial")
 }
 
 // ─── POST TEMPLATES ─────────────────────────────────────────────────────────
 
 model PostTemplate {
-  id            String         @id @default(cuid())
-  agencyId      String
-  agency        Agency         @relation(fields: [agencyId], references: [id])
-  name          String
-  description   String?
-  copyTemplate  String?
-  hashtags      String?
-  network       SocialNetwork?
-  postType      PostType?
-  categoryId    String?
-  category      PostCategory?  @relation(fields: [categoryId], references: [id])
-  usageCount    Int            @default(0)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  agencyId     String
+  agency       Agency         @relation(fields: [agencyId], references: [id])
+  name         String
+  description  String?
+  copyTemplate String?
+  hashtags     String?
+  network      SocialNetwork?
+  postType     PostType?
+  categoryId   String?
+  category     PostCategory?  @relation(fields: [categoryId], references: [id])
+  usageCount   Int            @default(0)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   media TemplateMedia[]
 
   @@index([agencyId])
-  @@schema("isysocial")
   @@map("iso_post_templates")
+  @@schema("isysocial")
 }
 
 model TemplateMedia {
@@ -508,8 +581,8 @@ model TemplateMedia {
   sortOrder   Int          @default(0)
   createdAt   DateTime     @default(now())
 
-  @@schema("isysocial")
   @@map("iso_template_media")
+  @@schema("isysocial")
 }
 
 // ─── POST CATEGORIES ─────────────────────────────────────────────────────────
@@ -519,7 +592,7 @@ model PostCategory {
   agencyId  String
   agency    Agency   @relation(fields: [agencyId], references: [id])
   name      String
-  color     String   // hex "#FF5722"
+  color     String // hex "#FF5722"
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
@@ -529,8 +602,8 @@ model PostCategory {
 
   @@unique([agencyId, name])
   @@index([agencyId])
-  @@schema("isysocial")
   @@map("iso_post_categories")
+  @@schema("isysocial")
 }
 
 // ─── CLIENT BRAND ASSETS ─────────────────────────────────────────────────────
@@ -549,8 +622,8 @@ model ClientBrandAsset {
   createdAt   DateTime      @default(now())
 
   @@index([clientId])
-  @@schema("isysocial")
   @@map("iso_client_brand_assets")
+  @@schema("isysocial")
 }
 
 // ─── NOTIFICATIONS & SYSTEM ───────────────────────────────────────────────────
@@ -568,8 +641,8 @@ model Notification {
   createdAt   DateTime         @default(now())
 
   @@index([userId, isRead])
-  @@schema("isysocial")
   @@map("iso_notifications")
+  @@schema("isysocial")
 }
 
 model Token {
@@ -582,8 +655,87 @@ model Token {
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
-  @@schema("isysocial")
   @@map("iso_tokens")
+  @@schema("isysocial")
+}
+
+// ─── BRAND BROCHURE (Guided AI questionnaire) ──────────────────────────────────
+
+model BrandBrochureSession {
+  id        String @id @default(cuid())
+  clientId  String
+  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  status      String  @default("INITIAL")  // INITIAL, IN_PROGRESS, COMPLETED, ABANDONED
+  currentStep Int     @default(1)
+
+  // Responses from client
+  responses Json @default("{}")  // { questionId: answer }
+
+  // Generated fields by AI
+  generatedFieldSchema Json?  // { fields: [...], metadata: {...} }
+
+  // Final brand kit merge
+  finalBrandKit Json?
+
+  initiatedAt DateTime @default(now())
+  completedAt DateTime?
+
+  questions BrandBrochureQuestion[]
+  fields    BrandBrochureField[]
+
+  @@unique([clientId])
+  @@index([clientId])
+  @@map("iso_brand_brochure_sessions")
+  @@schema("isysocial")
+}
+
+model BrandBrochureQuestion {
+  id        String @id @default(cuid())
+  sessionId String
+  session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  stepNumber  Int
+  questionId  String         // "company_desc", "industry", "target_audience", etc.
+  question    String
+  inputType   String         @default("textarea")  // textarea, text, select, multi-select, color, file
+  hint        String?
+  required    Boolean        @default(true)
+
+  response     String?
+  responseJson Json?          // For complex inputs (files, multiple values)
+
+  aiGenerated Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId])
+  @@map("iso_brand_brochure_questions")
+  @@schema("isysocial")
+}
+
+model BrandBrochureField {
+  id        String @id @default(cuid())
+  sessionId String
+  session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  fieldId   String       // "missionStatement", "brandColors", "targetAudience", etc.
+  label     String
+  category  String       // "communication", "identity", "strategy", "assets"
+
+  suggestedValue String?  // AI-generated suggestion
+  clientValue    String?  // Client's edited/approved value
+  confidence     Float?   // AI confidence score (0-1)
+
+  relatedQuestions String[]  // Which questions informed this field
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, fieldId])
+  @@index([sessionId])
+  @@map("iso_brand_brochure_fields")
+  @@schema("isysocial")
 }
 
 model SystemConfig {
@@ -592,6 +744,6 @@ model SystemConfig {
   value     Json
   updatedAt DateTime @updatedAt
 
-  @@schema("isysocial")
   @@map("iso_system_config")
+  @@schema("isysocial")
 }

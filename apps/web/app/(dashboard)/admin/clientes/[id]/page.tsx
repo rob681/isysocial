@@ -21,6 +21,8 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Topbar } from "@/components/layout/topbar";
+import { ClientPageSelector } from "@/components/social-networks/client-page-selector";
 
 // ── Network metadata ──────────────────────────────────────────────────────────
 const NETWORK_META: Record<
@@ -91,8 +93,9 @@ export default function ClientDetailPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: client, isLoading: clientLoading } =
+  const { data: clientData, isLoading: clientLoading } =
     trpc.clients.get.useQuery({ id: clientId });
+  const client = clientData as any;
 
   const {
     data: networkStatus,
@@ -132,26 +135,39 @@ export default function ClientDetailPage() {
 
   if (clientLoading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle del cliente" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!client) {
     return (
-      <div className="text-center py-16">
-        <p className="text-muted-foreground">Cliente no encontrado</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          Volver
-        </Button>
+      <div className="flex flex-col flex-1">
+        <Topbar title="Detalle del cliente" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="text-center py-16">
+            <p className="text-muted-foreground">Cliente no encontrado</p>
+            <Button variant="outline" className="mt-4" onClick={() => router.back()}>
+              Volver
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="flex flex-col flex-1">
+      <Topbar title="Detalle del cliente" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.push("/admin/clientes")}>
@@ -171,7 +187,7 @@ export default function ClientDetailPage() {
           )}
           <div>
             <h1 className="text-xl font-bold">{client.companyName}</h1>
-            <p className="text-sm text-muted-foreground">{client.user.email}</p>
+            <p className="text-sm text-muted-foreground">{client?.user?.email ?? "email@example.com"}</p>
           </div>
         </div>
         <Button
@@ -208,28 +224,28 @@ export default function ClientDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Contacto</p>
-                  <p className="text-sm mt-1">{client.user.name}</p>
+                  <p className="text-sm mt-1">{client?.user?.name ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Email</p>
-                  <p className="text-sm mt-1">{client.user.email}</p>
+                  <p className="text-sm mt-1">{client?.user?.email ?? "-"}</p>
                 </div>
-                {client.user.phone && (
+                {client?.user?.phone && (
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Teléfono</p>
-                    <p className="text-sm mt-1">{client.user.phone}</p>
+                    <p className="text-sm mt-1">{client?.user?.phone}</p>
                   </div>
                 )}
               </div>
 
               {/* Social networks configured */}
-              {client.socialNetworks.length > 0 && (
+              {((client as any)?.socialNetworks?.length ?? 0) > 0 && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-2">
                     Redes configuradas
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {client.socialNetworks.map((sn) => {
+                    {(client as any).socialNetworks.map((sn: any) => {
                       const meta = NETWORK_META[sn.network];
                       return (
                         <Badge
@@ -251,28 +267,41 @@ export default function ClientDetailPage() {
               )}
 
               <div className="flex gap-2 text-sm text-muted-foreground">
-                <span>{client._count.posts} posts</span>
+                <span>{(client as any)._count?.posts ?? 0} posts</span>
                 <span>·</span>
-                <span>{client._count.ideas} ideas</span>
+                <span>{(client as any)._count?.ideas ?? 0} ideas</span>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* ── Redes Sociales Tab ────────────────────────────────────────────── */}
-        <TabsContent value="redes" className="space-y-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted-foreground">
-              Conecta las redes sociales de este cliente para publicar directamente desde Isysocial.
+        <TabsContent value="redes" className="space-y-6">
+          {/* Page Assignment Section */}
+          <div>
+            <h3 className="text-base font-semibold mb-2">Asignar Páginas</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Selecciona las páginas que este cliente puede usar para publicar contenido.
             </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refetchNetworks()}
-              disabled={networksLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${networksLoading ? "animate-spin" : ""}`} />
-            </Button>
+            <ClientPageSelector clientId={clientId} />
+          </div>
+
+          {/* Connect New Networks Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-semibold">Conectar Nuevas Redes</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetchNetworks()}
+                disabled={networksLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${networksLoading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Conecta páginas de redes sociales a nivel de agencia (disponible para todos los clientes).
+            </p>
           </div>
 
           {networksLoading ? (
@@ -373,6 +402,8 @@ export default function ClientDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+      </div>
+      </main>
     </div>
   );
 }

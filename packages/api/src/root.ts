@@ -14,10 +14,12 @@ import { profileRouter } from "./routers/profile.router";
 import { clientGroupsRouter } from "./routers/clientGroups.router";
 import { publishingRouter } from "./routers/publishing.router";
 import { aiRouter } from "./routers/ai.router";
+import { brandBrochureRouter } from "./routers/brandBrochure.router";
 
 export const appRouter = router({
   auth: authRouter,
   ai: aiRouter,
+  brandBrochure: brandBrochureRouter,
   clients: clientsRouter,
   clientGroups: clientGroupsRouter,
   publishing: publishingRouter,

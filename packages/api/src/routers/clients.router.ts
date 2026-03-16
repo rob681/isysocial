@@ -119,7 +119,7 @@ export const clientsRouter = router({
               accountName: true,
               profilePic: true,
               isActive: true,
-              connectedAt: true,
+              assignedAt: true,
               tokenExpiresAt: true,
             },
           },
@@ -277,6 +277,7 @@ export const clientsRouter = router({
             accountName: z.string().optional(),
             profilePic: z.string().optional(),
             isActive: z.boolean().default(true),
+            pageId: z.string().optional(), // Allow pageId for new schema
           })
         ),
       })
@@ -293,13 +294,21 @@ export const clientsRouter = router({
 
       // Upsert each network
       for (const net of input.networks) {
+        // Use pageId if available, otherwise use network as fallback for backward compatibility
+        const pageId = net.pageId || net.network;
+
         await ctx.db.clientSocialNetwork.upsert({
           where: {
-            clientId_network: { clientId: input.clientId, network: net.network },
+            clientId_network_pageId: {
+              clientId: input.clientId,
+              network: net.network,
+              pageId: pageId,
+            },
           },
           create: {
             clientId: input.clientId,
             network: net.network,
+            pageId: pageId,
             accountName: net.accountName,
             profilePic: net.profilePic,
             isActive: net.isActive,
@@ -551,5 +560,203 @@ export const clientsRouter = router({
       }
 
       return { success: true };
+    }),
+
+  // ─── SOCIAL NETWORKS MANAGEMENT ────────────────────────────────────────
+
+  getAvailablePagesToAssign: adminProcedure
+    .input(z.object({ clientId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify client exists and belongs to agency
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      // Get all agency's connected pages
+      const agencyPages = await ctx.db.agencySocialAccount.findMany({
+        where: { agencyId, isActive: true },
+        orderBy: [{ network: "asc" }, { accountName: "asc" }],
+      });
+
+      // Get already assigned pages for this client
+      const assignedPages = await ctx.db.clientSocialNetwork.findMany({
+        where: { clientId: input.clientId, isActive: true },
+        select: { pageId: true, network: true },
+      });
+
+      const assignedPageIds = assignedPages.map((p) => p.pageId).filter(Boolean) as string[];
+
+      return {
+        availablePages: agencyPages.map((page) => ({
+          id: page.id,
+          network: page.network,
+          pageId: page.pageId,
+          accountName: page.accountName,
+          profilePic: page.profilePic,
+          alreadyAssigned: assignedPageIds.includes(page.pageId || ""),
+        })),
+        assignedCount: assignedPages.length,
+      };
+    }),
+
+  assignPagesToClient: adminProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        pageIds: z.array(z.string()),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify client exists and belongs to agency
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      // Get agency pages to assign
+      const agencyPages = await ctx.db.agencySocialAccount.findMany({
+        where: { id: { in: input.pageIds }, agencyId },
+      });
+
+      if (agencyPages.length !== input.pageIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Una o más páginas no son válidas" });
+      }
+
+      // Create client social network entries
+      const results = await Promise.all(
+        agencyPages.map((page) =>
+          ctx.db.clientSocialNetwork.upsert({
+            where: {
+              clientId_network_pageId: {
+                clientId: input.clientId,
+                network: page.network,
+                pageId: page.pageId || page.accountId,
+              },
+            },
+            update: { isActive: true, assignedAt: new Date() },
+            create: {
+              clientId: input.clientId,
+              network: page.network,
+              pageId: page.pageId || page.accountId,
+              accountName: page.accountName,
+              profilePic: page.profilePic,
+              sourceType: "agency",
+              agencyAccountId: page.id,
+              accessToken: page.accessToken,
+              tokenExpiresAt: page.tokenExpiresAt,
+              accountId: page.accountId,
+              tokenScope: page.tokenScope,
+            },
+          })
+        )
+      );
+
+      return {
+        success: true,
+        assigned: results.length,
+        pages: results.map((r) => ({
+          id: r.id,
+          network: r.network,
+          accountName: r.accountName,
+        })),
+      };
+    }),
+
+  removePageFromClient: adminProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        pageId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify client exists and belongs to agency
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      // Find and delete
+      const clientNetwork = await ctx.db.clientSocialNetwork.findFirst({
+        where: { clientId: input.clientId, pageId: input.pageId },
+      });
+
+      if (!clientNetwork) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Página no encontrada para este cliente" });
+      }
+
+      await ctx.db.clientSocialNetwork.delete({
+        where: { id: clientNetwork.id },
+      });
+
+      return { success: true, message: "Página desvinculada" };
+    }),
+
+  getClientPages: protectedProcedure
+    .input(z.object({ clientId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify access
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true, id: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      // Get client's assigned pages grouped by network
+      const pages = await ctx.db.clientSocialNetwork.findMany({
+        where: { clientId: input.clientId, isActive: true },
+        orderBy: [{ network: "asc" }, { accountName: "asc" }],
+      });
+
+      // Group by network
+      const grouped = pages.reduce(
+        (acc, page) => {
+          if (!acc[page.network]) {
+            acc[page.network] = [];
+          }
+          acc[page.network].push({
+            id: page.id,
+            pageId: page.pageId,
+            accountName: page.accountName,
+            profilePic: page.profilePic,
+            isActive: page.isActive,
+            assignedAt: page.assignedAt,
+          });
+          return acc;
+        },
+        {} as Record<
+          string,
+          {
+            id: string;
+            pageId: string | null;
+            accountName: string | null;
+            profilePic: string | null;
+            isActive: boolean;
+            assignedAt: Date;
+          }[]
+        >
+      );
+
+      return { pages: grouped, total: pages.length };
     }),
 });

@@ -15,6 +15,7 @@ import {
 import { canTransition } from "@isysocial/shared";
 import type { Role, PostStatus } from "@isysocial/shared";
 import { sendEmailNotification } from "../lib/email";
+import { sendPushNotification } from "../lib/fcm";
 
 export const postsRouter = router({
   // ─── Create Post ─────────────────────────────────────────────────────────
@@ -29,6 +30,21 @@ export const postsRouter = router({
       });
       if (!client) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado" });
+      }
+
+      // Validate client has assigned pages for the selected network
+      const clientNetwork = await ctx.db.clientSocialNetwork.findFirst({
+        where: {
+          clientId: input.clientId,
+          network: input.network,
+          isActive: true,
+        },
+      });
+      if (!clientNetwork) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `El cliente no tiene páginas asignadas para ${input.network}`,
+        });
       }
 
       const post = await ctx.db.post.create({
@@ -99,9 +115,9 @@ export const postsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Publicación no encontrada" });
       }
 
-      // Clients can only see non-internal comments
+      // Clients cannot see any comments — comments are internal-only for team
       if (user.role === "CLIENTE") {
-        post.comments = post.comments.filter((c) => !c.isInternal);
+        post.comments = [];
       }
 
       return post;
@@ -312,7 +328,15 @@ export const postsRouter = router({
         }
       }
 
+      let statusToUpdate = toStatus;
       const updateData: any = { status: toStatus };
+
+      // ── Auto-schedule on approval ──────────────────────────────────────────
+      // If post is approved AND has a scheduled date, move directly to SCHEDULED
+      if (toStatus === "APPROVED" && post.scheduledAt) {
+        statusToUpdate = "SCHEDULED";
+        updateData.status = "SCHEDULED";
+      }
 
       // Increment revisions counter on CLIENT_CHANGES
       if (toStatus === "CLIENT_CHANGES") {
@@ -320,7 +344,7 @@ export const postsRouter = router({
       }
 
       // Set publishedAt
-      if (toStatus === "PUBLISHED") {
+      if (statusToUpdate === "PUBLISHED") {
         updateData.publishedAt = new Date();
       }
 
@@ -330,12 +354,12 @@ export const postsRouter = router({
           data: updateData,
         });
 
-        // Log status change
+        // Log status change (use statusToUpdate for accurate logging)
         await tx.postStatusLog.create({
           data: {
             postId: post.id,
             fromStatus: fromStatus,
-            toStatus: toStatus,
+            toStatus: statusToUpdate,
             changedById: user.id,
             note: input.note,
           },
@@ -367,6 +391,25 @@ export const postsRouter = router({
               type: "POST_APPROVED",
               title: "¡Contenido aprobado!",
               body: `"${post.title || "Sin título"}" fue aprobado por ${post.client.user.name}.`,
+            });
+          }
+        }
+
+        // Notify if auto-scheduled on approval
+        if (statusToUpdate === "SCHEDULED" && toStatus === "APPROVED" && post.scheduledAt) {
+          const scheduledDate = new Date(post.scheduledAt).toLocaleDateString("es-MX", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          if (post.editorId) {
+            notifications.push({
+              userId: post.editorId,
+              type: "POST_SCHEDULED",
+              title: "Contenido programado",
+              body: `"${post.title || "Sin título"}" fue programado para ${scheduledDate}.`,
             });
           }
         }
@@ -447,6 +490,32 @@ export const postsRouter = router({
         }
       }
 
+      // Notify if auto-scheduled on approval
+      if (statusToUpdate === "SCHEDULED" && toStatus === "APPROVED" && post.scheduledAt && post.editorId) {
+        const scheduledDate = new Date(post.scheduledAt).toLocaleDateString("es-MX", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const editor = await ctx.db.user.findUnique({
+          where: { id: post.editorId },
+          select: { email: true, name: true },
+        });
+        if (editor?.email) {
+          sendEmailNotification({
+            db: ctx.db,
+            to: editor.email,
+            subject: `Contenido programado: "${postTitle}" para ${scheduledDate}`,
+            title: "Contenido programado",
+            body: `Tu post <strong>"${postTitle}"</strong> fue aprobado y programado automáticamente para publicarse el ${scheduledDate}.`,
+            actionUrl: `${baseUrl}/editor/contenido/${post.id}`,
+            actionLabel: "Ver programación",
+          }).catch(() => {});
+        }
+      }
+
       if (toStatus === "CLIENT_CHANGES" && post.editorId) {
         // Notify editor: client requested changes
         const editor = await ctx.db.user.findUnique({
@@ -483,7 +552,197 @@ export const postsRouter = router({
         }
       }
 
+      // ── FCM push notifications (fire-and-forget) ────────────────────────
+      if (toStatus === "IN_REVIEW") {
+        sendPushNotification({
+          db: ctx.db,
+          userId: post.client.user.id,
+          title: "Contenido listo para revisar",
+          body: `"${postTitle}" está listo para tu revisión.`,
+          data: { url: `/cliente/contenido/${post.id}` },
+        }).catch(() => {});
+      }
+      if (toStatus === "APPROVED" && post.editorId) {
+        sendPushNotification({
+          db: ctx.db,
+          userId: post.editorId,
+          title: "¡Contenido aprobado!",
+          body: `"${postTitle}" fue aprobado por ${post.client.user.name}.`,
+          data: { url: `/editor/contenido/${post.id}` },
+        }).catch(() => {});
+      }
+      if (toStatus === "CLIENT_CHANGES" && post.editorId) {
+        sendPushNotification({
+          db: ctx.db,
+          userId: post.editorId,
+          title: "Se solicitaron cambios",
+          body: `${post.client.user.name} solicitó cambios en "${postTitle}".`,
+          data: { url: `/editor/contenido/${post.id}` },
+        }).catch(() => {});
+      }
+      if (toStatus === "PUBLISHED") {
+        sendPushNotification({
+          db: ctx.db,
+          userId: post.client.user.id,
+          title: "¡Tu contenido está en vivo!",
+          body: `"${postTitle}" ha sido publicado.`,
+          data: { url: `/cliente/contenido/${post.id}` },
+        }).catch(() => {});
+      }
+
       return updated;
+    }),
+
+  // ─── Request Guided Review ────────────────────────────────────────────────
+  requestGuidedReview: protectedProcedure
+    .input(
+      z.object({
+        postId: z.string(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const user = ctx.session.user;
+
+      const post = await ctx.db.post.findFirst({
+        where: { id: input.postId, agencyId },
+        include: { client: true },
+      });
+
+      if (!post) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Publicación no encontrada" });
+      }
+
+      // Only allow if revisions are exhausted
+      if (post.revisionsUsed < post.revisionsLimit) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Aún tienes revisiones disponibles",
+        });
+      }
+
+      // Only allow ONE guided review per post
+      if (post.hasRequestedGuidedReview) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Ya se solicitó una revisión guiada para esta publicación",
+        });
+      }
+
+      // Create the session and mark the post
+      const [session] = await ctx.db.$transaction([
+        ctx.db.guidedReviewSession.create({
+          data: {
+            postId: input.postId,
+            clientId: post.clientId,
+            notes: input.notes ?? null,
+            createdBy: user.id,
+            status: "PENDING",
+          },
+        }),
+        ctx.db.post.update({
+          where: { id: input.postId },
+          data: { hasRequestedGuidedReview: true },
+        }),
+      ]);
+
+      // Notify agency admins about the guided review request (fire-and-forget)
+      const admins = await ctx.db.user.findMany({
+        where: { agencyId: post.agencyId, role: "ADMIN", isActive: true },
+        select: { id: true },
+      });
+      const postTitle = post.copy?.slice(0, 40) || "Publicación";
+      for (const admin of admins) {
+        sendPushNotification({
+          db: ctx.db,
+          userId: admin.id,
+          title: "Revisión guiada solicitada",
+          body: `${post.client.companyName} solicitó revisión guiada para "${postTitle}"`,
+          data: { url: `/admin/contenido/${post.id}` },
+        }).catch(() => {});
+      }
+
+      return session;
+    }),
+
+  // ─── List Guided Review Sessions (Admin) ──────────────────────────────────
+  listGuidedReviews: adminOrPermissionProcedure("MANAGE_ALL_CLIENTS")
+    .input(
+      z.object({
+        status: z.enum(["PENDING", "SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      return ctx.db.guidedReviewSession.findMany({
+        where: {
+          post: { agencyId },
+          ...(input?.status ? { status: input.status } : {}),
+        },
+        include: {
+          post: {
+            select: { id: true, copy: true, network: true, status: true },
+          },
+          client: {
+            select: { id: true, companyName: true, logoUrl: true },
+          },
+        },
+        orderBy: { requestedAt: "desc" },
+      });
+    }),
+
+  // ─── Schedule Guided Review (Admin) ───────────────────────────────────────
+  scheduleGuidedReview: adminOrPermissionProcedure("MANAGE_ALL_CLIENTS")
+    .input(
+      z.object({
+        sessionId: z.string(),
+        scheduledAt: z.string().datetime(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const session = await ctx.db.guidedReviewSession.findFirst({
+        where: { id: input.sessionId, post: { agencyId } },
+      });
+
+      if (!session) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sesión no encontrada" });
+      }
+
+      return ctx.db.guidedReviewSession.update({
+        where: { id: input.sessionId },
+        data: {
+          scheduledAt: new Date(input.scheduledAt),
+          status: "SCHEDULED",
+          confirmedBy: ctx.session.user.id,
+        },
+      });
+    }),
+
+  // ─── Complete Guided Review (Admin) ───────────────────────────────────────
+  completeGuidedReview: adminOrPermissionProcedure("MANAGE_ALL_CLIENTS")
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const session = await ctx.db.guidedReviewSession.findFirst({
+        where: { id: input.sessionId, post: { agencyId } },
+      });
+
+      if (!session) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sesión no encontrada" });
+      }
+
+      return ctx.db.guidedReviewSession.update({
+        where: { id: input.sessionId },
+        data: {
+          completedAt: new Date(),
+          status: "COMPLETED",
+        },
+      });
     }),
 
   // ─── Add Comment ─────────────────────────────────────────────────────────
@@ -503,8 +762,15 @@ export const postsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Publicación no encontrada" });
       }
 
-      // Clients can't make internal comments
-      const isInternal = user.role === "CLIENTE" ? false : input.isInternal;
+      // Clients cannot create comments at all — comments are internal-only for team
+      if (user.role === "CLIENTE") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Los comentarios son solo para uso interno del equipo",
+        });
+      }
+
+      const isInternal = input.isInternal;
 
       const comment = await ctx.db.postComment.create({
         data: {
@@ -585,6 +851,17 @@ export const postsRouter = router({
             actionLabel: "Ver comentario",
           }).catch(() => {});
         }
+      }
+
+      // ── FCM push for comments (fire-and-forget) ──────────────────────────
+      for (const notifyUserId of notifyUserIds) {
+        sendPushNotification({
+          db: ctx.db,
+          userId: notifyUserId,
+          title: "Nuevo comentario",
+          body: `${user.name} comentó en "${postTitle}"`,
+          data: { url: `/notificaciones` },
+        }).catch(() => {});
       }
 
       return comment;
@@ -882,6 +1159,16 @@ export const postsRouter = router({
       const newPosts = [];
       for (const network of input.networks) {
         if (network === source.network) continue; // Don't mirror to same network
+
+        // Validate client has assigned pages for this network
+        const clientNetwork = await ctx.db.clientSocialNetwork.findFirst({
+          where: {
+            clientId: source.clientId,
+            network,
+            isActive: true,
+          },
+        });
+        if (!clientNetwork) continue; // Skip networks client doesn't have access to
 
         // Check if mirror already exists for this network
         const existing = await ctx.db.post.findFirst({
