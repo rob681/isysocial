@@ -328,6 +328,10 @@ export const agenciesRouter = router({
         connectedAccounts.push(upsertedAccount);
       }
 
+      // Clean up temporary pending data from SystemConfig
+      const pendingKey = `meta_pending_${agencyId}`;
+      await ctx.db.systemConfig.delete({ where: { key: pendingKey } }).catch(() => {});
+
       return {
         success: true,
         connected: connectedAccounts.length,

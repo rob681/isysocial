@@ -382,6 +382,76 @@ export const analyticsRouter = router({
     }),
 
   /**
+   * Weekly publishing activity — last 4 weeks
+   */
+  getWeeklyPublishing: adminOrPermissionProcedure("VIEW_ANALYTICS")
+    .query(async ({ ctx }) => {
+      const agencyId = getAgencyId(ctx);
+      const now = new Date();
+      const weeks: { label: string; from: Date; to: Date }[] = [];
+
+      for (let i = 3; i >= 0; i--) {
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - (i + 1) * 7);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(now);
+        weekEnd.setDate(now.getDate() - i * 7);
+        weekEnd.setHours(23, 59, 59, 999);
+
+        const startDay = weekStart.getDate();
+        const startMonth = weekStart.toLocaleDateString("es", { month: "short" });
+        const endDay = weekEnd.getDate();
+        weeks.push({
+          label: `${startDay} ${startMonth} – ${endDay}`,
+          from: weekStart,
+          to: weekEnd,
+        });
+      }
+
+      const results = await Promise.all(
+        weeks.map(async (week) => {
+          const [created, published] = await Promise.all([
+            ctx.db.post.count({
+              where: { agencyId, createdAt: { gte: week.from, lte: week.to } },
+            }),
+            ctx.db.post.count({
+              where: { agencyId, status: "PUBLISHED", publishedAt: { gte: week.from, lte: week.to } },
+            }),
+          ]);
+          return { label: week.label, created, published };
+        })
+      );
+
+      return results;
+    }),
+
+  /**
+   * Recent published posts — last N published with details
+   */
+  getRecentPublished: adminOrPermissionProcedure("VIEW_ANALYTICS")
+    .input(z.object({ limit: z.number().int().min(1).max(20).default(10) }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      return ctx.db.post.findMany({
+        where: { agencyId, status: "PUBLISHED" },
+        orderBy: { publishedAt: "desc" },
+        take: input.limit,
+        select: {
+          id: true,
+          title: true,
+          network: true,
+          postType: true,
+          status: true,
+          publishedAt: true,
+          client: {
+            select: { companyName: true, user: { select: { name: true } } },
+          },
+        },
+      });
+    }),
+
+  /**
    * Recent activity — last status changes across all posts
    */
   getRecentActivity: adminOrPermissionProcedure("VIEW_ANALYTICS")

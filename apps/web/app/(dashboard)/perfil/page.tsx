@@ -25,6 +25,7 @@ import {
   Building2,
   CheckCircle2,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -467,7 +468,64 @@ export default function PerfilPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Tour guiado */}
+        <TourResetButton />
       </main>
     </div>
+  );
+}
+
+/* ─── Tour Reset Button ─────────────────────────────────────────── */
+function TourResetButton() {
+  const { toast } = useToast();
+  const resetMutation = trpc.profile.resetOnboarding.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Tour reiniciado",
+        description: "El tour guiado se mostrara al recargar la pagina.",
+      });
+      setTimeout(() => window.location.reload(), 1200);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo reiniciar el tour.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <RotateCcw className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Tour guiado</p>
+            <p className="text-xs text-muted-foreground">
+              Vuelve a ver el recorrido por la plataforma
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => resetMutation.mutate()}
+          disabled={resetMutation.isPending}
+        >
+          {resetMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reiniciar
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

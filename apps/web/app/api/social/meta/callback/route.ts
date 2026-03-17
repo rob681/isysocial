@@ -177,34 +177,28 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── Step 5: Store accounts & tokens in cookie (15 min expires) ──────────
-    // Serialize as JSON and store in secure HTTP-only cookie
-    const cookieValue = Buffer.from(
-      JSON.stringify({
-        agencyId,
-        accounts: accountsWithDetails,
-        timestamp: Date.now(),
-      })
-    ).toString("base64url");
+    // ── Step 5: Store accounts & tokens in DB (instead of cookie to avoid size limits) ─
+    const pendingKey = `meta_pending_${agencyId}`;
+    const pendingData = {
+      agencyId,
+      accounts: accountsWithDetails,
+      timestamp: Date.now(),
+    };
 
-    const response = NextResponse.redirect(
-      `${REDIRECT_BASE}/admin/configuracion/conectar-meta`
-    );
-
-    // Set secure HTTP-only cookie that expires in 15 minutes
-    response.cookies.set("meta_pending_accounts", cookieValue, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 15 * 60, // 15 minutes
-      path: "/",
+    // Upsert into SystemConfig as temporary storage
+    await db.systemConfig.upsert({
+      where: { key: pendingKey },
+      create: { key: pendingKey, value: pendingData as any },
+      update: { value: pendingData as any },
     });
 
     console.log(
-      `[Meta OAuth] Success! Found ${accountsWithDetails.length} accounts. Redirecting to selector.`
+      `[Meta OAuth] Success! Found ${accountsWithDetails.length} accounts. Stored in DB. Redirecting to selector.`
     );
 
-    return response;
+    return NextResponse.redirect(
+      `${REDIRECT_BASE}/admin/configuracion/conectar-meta`
+    );
   } catch (err: any) {
     console.error("[Meta OAuth Callback Error]", err);
     const msg = encodeURIComponent(err?.message ?? "Error desconocido");

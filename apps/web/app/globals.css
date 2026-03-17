@@ -141,6 +141,28 @@
   }
 }
 
+/* ── Landing page utilities ── */
+@layer components {
+  .container-landing {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  .section-padding {
+    @apply py-20 md:py-28 lg:py-32;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes float-delayed {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float { animation: float 5s ease-in-out infinite; }
+.animate-float-delayed { animation: float-delayed 6s ease-in-out 1s infinite; }
+
 *:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;

@@ -15,10 +15,13 @@ import { clientGroupsRouter } from "./routers/clientGroups.router";
 import { publishingRouter } from "./routers/publishing.router";
 import { aiRouter } from "./routers/ai.router";
 import { brandBrochureRouter } from "./routers/brandBrochure.router";
+import { auditRouter } from "./routers/audit.router";
+import { platformRouter } from "./routers/platform.router";
 
 export const appRouter = router({
   auth: authRouter,
   ai: aiRouter,
+  audit: auditRouter,
   brandBrochure: brandBrochureRouter,
   clients: clientsRouter,
   clientGroups: clientGroupsRouter,
@@ -33,6 +36,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   templates: templatesRouter,
   profile: profileRouter,
+  platform: platformRouter,
 });
 
 export type AppRouter = typeof appRouter;

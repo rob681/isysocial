@@ -19,12 +19,14 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
 
-  // Find posts ready to publish
+  // Find posts ready to publish (max 10 per invocation to stay within Vercel timeout)
   const scheduledPosts = await db.post.findMany({
     where: {
       status: "SCHEDULED",
       scheduledAt: { lte: now },
     },
+    take: 10,
+    orderBy: { scheduledAt: "asc" },
     include: {
       media: { orderBy: { sortOrder: "asc" } },
       client: {

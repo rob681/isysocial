@@ -36,6 +36,10 @@ import {
   Share2,
   ChevronsLeft,
   Wand2,
+  Pencil,
+  Trash2,
+  Activity,
+  FileBarChart,
 } from "lucide-react";
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { useTheme } from "next-themes";
@@ -64,9 +68,11 @@ const adminToolsNav: NavItem[] = [
   { label: "Equipo", href: "/admin/equipo", icon: <Users className="h-5 w-5" />, tourId: "sidebar-team" },
   { label: "Plantillas", href: "/admin/plantillas", icon: <LayoutTemplate className="h-5 w-5" /> },
   { label: "Analíticas", href: "/admin/analiticas", icon: <BarChart3 className="h-5 w-5" /> },
+  { label: "Reportes", href: "/admin/reportes", icon: <FileBarChart className="h-5 w-5" /> },
   { label: "Archivo", href: "/admin/archivo", icon: <Archive className="h-5 w-5" /> },
   { label: "Redes Sociales", href: "/admin/redes-sociales", icon: <Share2 className="h-5 w-5" /> },
   { label: "Grid Preview", href: "/admin/grid-preview", icon: <Grid3X3 className="h-5 w-5" /> },
+  { label: "Actividad", href: "/admin/actividad", icon: <Activity className="h-5 w-5" />, tourId: "sidebar-activity" },
   { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" />, tourId: "sidebar-settings" },
 ];
 
@@ -800,6 +806,11 @@ function ClientPanelInner({
   const [newGroupColor, setNewGroupColor] = useState(PRESET_COLORS[0]);
   const groupInputRef = useRef<HTMLInputElement>(null);
 
+  // Group editing state
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState("");
+  const [editGroupColor, setEditGroupColor] = useState("");
+
   const { data: clients } = trpc.clients.getForSidebar.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
@@ -818,6 +829,38 @@ function ClientPanelInner({
       setNewGroupColor(PRESET_COLORS[0]);
     },
   });
+
+  const updateGroup = trpc.clientGroups.update.useMutation({
+    onSuccess: () => {
+      utils.clientGroups.list.invalidate();
+      utils.clients.getForSidebar.invalidate();
+      setEditingGroupId(null);
+    },
+  });
+
+  const deleteGroupMut = trpc.clientGroups.delete.useMutation({
+    onSuccess: () => {
+      utils.clientGroups.list.invalidate();
+      utils.clients.getForSidebar.invalidate();
+      setEditingGroupId(null);
+    },
+  });
+
+  const startEditingGroup = (group: { id: string; name: string; color?: string }) => {
+    setEditingGroupId(group.id);
+    setEditGroupName(group.name);
+    setEditGroupColor((group as any).color || "#6B7280");
+  };
+
+  const saveGroupEdit = () => {
+    if (editingGroupId && editGroupName.trim()) {
+      updateGroup.mutate({
+        id: editingGroupId,
+        name: editGroupName.trim(),
+        color: editGroupColor,
+      });
+    }
+  };
 
   // Auto-expand client from URL
   useEffect(() => {
@@ -957,37 +1000,109 @@ function ClientPanelInner({
           // Skip empty groups during search
           if (searchQuery && groupClients.length === 0) return null;
 
+          const groupColor = (group as any).color || "#6B7280";
+          const isEditingThis = editingGroupId === group.id;
+
           return (
             <div key={group.id} className="mt-1">
-              <button
-                onClick={() => toggleGroup(group.id)}
-                className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                  hasActiveInGroup
-                    ? "text-primary font-semibold"
-                    : "text-muted-foreground hover:text-accent-foreground"
-                )}
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-3 w-3 flex-shrink-0 transition-transform duration-200",
-                    !isGroupCollapsed && "rotate-90"
-                  )}
-                />
-                {/* Colored dot for group */}
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: (group as any).color || "#6B7280" }}
-                />
-                <span className="font-semibold uppercase tracking-wider text-[10px] truncate">
-                  {group.name}
-                </span>
-                <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-                  {groupClients.length}
-                </span>
-              </button>
+              {isEditingThis ? (
+                /* ─── Inline Group Edit ─── */
+                <div className="px-1 py-1.5 mb-1 space-y-1.5 bg-accent/30 rounded-md">
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editGroupName}
+                      onChange={(e) => setEditGroupName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveGroupEdit();
+                        if (e.key === "Escape") setEditingGroupId(null);
+                      }}
+                      className="flex-1 min-w-0 px-2 py-1 text-xs bg-accent/50 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                    <button
+                      onClick={saveGroupEdit}
+                      disabled={!editGroupName.trim() || updateGroup.isLoading}
+                      className="p-1 rounded-md text-primary hover:bg-primary/10 disabled:opacity-30 transition-colors"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditingGroupId(null)}
+                      className="p-1 rounded-md text-muted-foreground hover:bg-accent transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 px-0.5">
+                    {PRESET_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setEditGroupColor(color)}
+                        className={cn(
+                          "w-5 h-5 rounded-full border-2 transition-all flex-shrink-0",
+                          editGroupColor === color
+                            ? "border-foreground scale-110"
+                            : "border-transparent hover:border-muted-foreground/50"
+                        )}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 px-0.5">
+                    <button
+                      onClick={() => {
+                        if (confirm(`Eliminar grupo "${group.name}"?`)) {
+                          deleteGroupMut.mutate({ id: group.id });
+                        }
+                      }}
+                      className="text-[10px] text-destructive hover:underline"
+                    >
+                      <Trash2 className="h-3 w-3 inline mr-0.5" />
+                      Eliminar grupo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ─── Normal Group Header ─── */
+                <div className="group/grp flex items-center">
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    className={cn(
+                      "flex items-center gap-2 flex-1 rounded-md px-2.5 py-1.5 text-xs transition-colors min-w-0",
+                      hasActiveInGroup
+                        ? "text-primary font-semibold"
+                        : "text-muted-foreground hover:text-accent-foreground"
+                    )}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3 w-3 flex-shrink-0 transition-transform duration-200",
+                        !isGroupCollapsed && "rotate-90"
+                      )}
+                    />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: groupColor }}
+                    />
+                    <span className="font-semibold uppercase tracking-wider text-[10px] truncate">
+                      {group.name}
+                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                      {groupClients.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => startEditingGroup(group)}
+                    className="p-1 rounded-md opacity-0 group-hover/grp:opacity-100 text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                    title="Editar grupo"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
 
-              {!isGroupCollapsed && (
+              {!isGroupCollapsed && !isEditingThis && (
                 <div className="ml-1 space-y-0.5 mt-0.5">
                   {groupClients.map((client) => (
                     <ClientItem
@@ -1201,6 +1316,11 @@ function MobileClientListInner({
   const [newGroupColor, setNewGroupColor] = useState(PRESET_COLORS[0]);
   const groupInputRef = useRef<HTMLInputElement>(null);
 
+  // Group editing state
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState("");
+  const [editGroupColor, setEditGroupColor] = useState("");
+
   const { data: clients } = trpc.clients.getForSidebar.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
@@ -1219,6 +1339,38 @@ function MobileClientListInner({
       setNewGroupColor(PRESET_COLORS[0]);
     },
   });
+
+  const updateGroup = trpc.clientGroups.update.useMutation({
+    onSuccess: () => {
+      utils.clientGroups.list.invalidate();
+      utils.clients.getForSidebar.invalidate();
+      setEditingGroupId(null);
+    },
+  });
+
+  const deleteGroupMut = trpc.clientGroups.delete.useMutation({
+    onSuccess: () => {
+      utils.clientGroups.list.invalidate();
+      utils.clients.getForSidebar.invalidate();
+      setEditingGroupId(null);
+    },
+  });
+
+  const startEditingGroup = (group: { id: string; name: string; color?: string }) => {
+    setEditingGroupId(group.id);
+    setEditGroupName(group.name);
+    setEditGroupColor((group as any).color || "#6B7280");
+  };
+
+  const saveGroupEdit = () => {
+    if (editingGroupId && editGroupName.trim()) {
+      updateGroup.mutate({
+        id: editingGroupId,
+        name: editGroupName.trim(),
+        color: editGroupColor,
+      });
+    }
+  };
 
   useEffect(() => {
     if (activeClientId && activeClientId !== expandedClient) {
@@ -1309,36 +1461,106 @@ function MobileClientListInner({
               (sub) => pathname.includes(`/${sub.segment}`) && activeClientId === c.id
             )
           );
+          const groupColor = (group as any).color || "#6B7280";
+          const isEditingThis = editingGroupId === group.id;
 
           return (
             <div key={group.id} className="mt-1">
-              <button
-                onClick={() => toggleGroup(group.id)}
-                className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                  hasActiveInGroup
-                    ? "text-primary font-semibold"
-                    : "text-muted-foreground hover:text-accent-foreground"
-                )}
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-3 w-3 flex-shrink-0 transition-transform duration-200",
-                    !isGroupCollapsed && "rotate-90"
-                  )}
-                />
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: (group as any).color || "#6B7280" }}
-                />
-                <span className="font-semibold uppercase tracking-wider text-[10px] truncate">
-                  {group.name}
-                </span>
-                <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-                  {groupClients.length}
-                </span>
-              </button>
-              {!isGroupCollapsed && (
+              {isEditingThis ? (
+                <div className="px-1 py-1.5 mb-1 space-y-1.5 bg-accent/30 rounded-md">
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editGroupName}
+                      onChange={(e) => setEditGroupName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveGroupEdit();
+                        if (e.key === "Escape") setEditingGroupId(null);
+                      }}
+                      className="flex-1 min-w-0 px-2 py-1 text-xs bg-accent/50 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                    <button
+                      onClick={saveGroupEdit}
+                      disabled={!editGroupName.trim() || updateGroup.isLoading}
+                      className="p-1 rounded-md text-primary hover:bg-primary/10 disabled:opacity-30 transition-colors"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditingGroupId(null)}
+                      className="p-1 rounded-md text-muted-foreground hover:bg-accent transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 px-0.5">
+                    {PRESET_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setEditGroupColor(color)}
+                        className={cn(
+                          "w-5 h-5 rounded-full border-2 transition-all flex-shrink-0",
+                          editGroupColor === color
+                            ? "border-foreground scale-110"
+                            : "border-transparent hover:border-muted-foreground/50"
+                        )}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 px-0.5">
+                    <button
+                      onClick={() => {
+                        if (confirm(`Eliminar grupo "${group.name}"?`)) {
+                          deleteGroupMut.mutate({ id: group.id });
+                        }
+                      }}
+                      className="text-[10px] text-destructive hover:underline"
+                    >
+                      <Trash2 className="h-3 w-3 inline mr-0.5" />
+                      Eliminar grupo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group/grp flex items-center">
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    className={cn(
+                      "flex items-center gap-2 flex-1 rounded-md px-2.5 py-1.5 text-xs transition-colors min-w-0",
+                      hasActiveInGroup
+                        ? "text-primary font-semibold"
+                        : "text-muted-foreground hover:text-accent-foreground"
+                    )}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3 w-3 flex-shrink-0 transition-transform duration-200",
+                        !isGroupCollapsed && "rotate-90"
+                      )}
+                    />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: groupColor }}
+                    />
+                    <span className="font-semibold uppercase tracking-wider text-[10px] truncate">
+                      {group.name}
+                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                      {groupClients.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => startEditingGroup(group)}
+                    className="p-1 rounded-md opacity-0 group-hover/grp:opacity-100 text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                    title="Editar grupo"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {!isGroupCollapsed && !isEditingThis && (
                 <div className="ml-1 space-y-0.5 mt-0.5">
                   {groupClients.map((client) => (
                     <ClientItem

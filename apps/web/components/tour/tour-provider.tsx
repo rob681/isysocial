@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { driver } from "driver.js";
+import { driver, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import { trpc } from "@/lib/trpc/client";
 import { adminTourSteps, editorTourSteps, clientTourSteps } from "./tour-steps";
@@ -10,20 +10,29 @@ import { adminTourSteps, editorTourSteps, clientTourSteps } from "./tour-steps";
 export function TourProvider() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role as string | undefined;
-  const [hasChecked, setHasChecked] = useState(false);
+  const driverRef = useRef<Driver | null>(null);
+  const hasStarted = useRef(false);
 
-  const { data: onboardingData } = trpc.profile.getOnboardingStatus.useQuery(
-    undefined,
-    { enabled: !!session?.user }
-  );
+  const { data: onboardingData, isLoading } =
+    trpc.profile.getOnboardingStatus.useQuery(undefined, {
+      enabled: !!session?.user,
+    });
 
   const completeMutation = trpc.profile.completeOnboarding.useMutation();
 
   useEffect(() => {
-    if (!session?.user || !role || !onboardingData || hasChecked) return;
-    setHasChecked(true);
+    // Wait until all data is ready
+    if (!session?.user || !role || isLoading || !onboardingData) return;
 
-    if (onboardingData.onboardingCompleted) return;
+    // Already completed — nothing to do
+    if (onboardingData.onboardingCompleted) {
+      hasStarted.current = false; // reset so a future toggle works
+      return;
+    }
+
+    // Don't start twice in the same render cycle
+    if (hasStarted.current) return;
+    hasStarted.current = true;
 
     // Small delay to let sidebar render & transition
     const timeout = setTimeout(() => {
@@ -31,7 +40,16 @@ export function TourProvider() {
       if (role === "ADMIN") steps = adminTourSteps;
       else if (role === "EDITOR") steps = editorTourSteps;
       else if (role === "CLIENTE") steps = clientTourSteps;
-      else return; // No tour for SUPER_ADMIN, SOPORTE, FACTURACION
+      else return;
+
+      // Destroy previous instance if any
+      if (driverRef.current) {
+        try {
+          driverRef.current.destroy();
+        } catch {
+          // ignore
+        }
+      }
 
       const driverObj = driver({
         showProgress: true,
@@ -47,21 +65,33 @@ export function TourProvider() {
         progressText: "{{current}} de {{total}}",
         steps,
         onDestroyStarted: () => {
-          // Mark onboarding as completed when user finishes or closes the tour
-          completeMutation.mutate(undefined, {
-            onSuccess: () => {
-              // Could refresh session here, but not critical
-            },
-          });
+          completeMutation.mutate();
           driverObj.destroy();
+          driverRef.current = null;
+          hasStarted.current = false;
         },
       });
 
+      driverRef.current = driverObj;
       driverObj.drive();
     }, 1500);
 
     return () => clearTimeout(timeout);
-  }, [session, role, onboardingData, hasChecked, completeMutation]);
+  }, [session, role, onboardingData, isLoading, completeMutation]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (driverRef.current) {
+        try {
+          driverRef.current.destroy();
+        } catch {
+          // ignore
+        }
+        driverRef.current = null;
+      }
+    };
+  }, []);
 
   return null;
 }

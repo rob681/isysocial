@@ -86,6 +86,18 @@ export const profileRouter = router({
   }),
 
   /**
+   * Reset onboarding so the tour plays again
+   */
+  resetOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    await ctx.db.user.update({
+      where: { id: userId },
+      data: { onboardingCompleted: false },
+    });
+    return { success: true };
+  }),
+
+  /**
    * Change password (requires current password)
    */
   changePassword: protectedProcedure

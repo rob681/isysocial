@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, Facebook, Instagram, Unplug } from "lucide-react";
+import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, Facebook, Instagram, Unplug, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -20,6 +20,60 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+/* ─── TourResetCard ──────────────────────────────────────────────── */
+function TourResetCard() {
+  const { toast } = useToast();
+  const resetMutation = trpc.profile.resetOnboarding.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Tour reiniciado",
+        description: "El tour guiado se mostrara al recargar la pagina.",
+      });
+      setTimeout(() => window.location.reload(), 1200);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo reiniciar el tour.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <RotateCcw className="h-5 w-5 text-primary" />
+          Tour guiado
+        </CardTitle>
+        <CardDescription>
+          Vuelve a ver el recorrido guiado por la plataforma para conocer todas las funciones disponibles.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button
+          variant="outline"
+          onClick={() => resetMutation.mutate()}
+          disabled={resetMutation.isPending}
+        >
+          {resetMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Reiniciando...
+            </>
+          ) : (
+            <>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reiniciar Tour
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 /* ─── CategoriesSection ──────────────────────────────────────────── */
 function CategoriesSection() {
@@ -782,6 +836,9 @@ function ConfiguracionContent() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Tour guiado */}
+            <TourResetCard />
 
             {/* Save */}
             <div className="flex justify-end">

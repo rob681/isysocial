@@ -555,12 +555,49 @@ function ClientCard({
 
 /* ─── Group Manager (inline section above client grid) ─────────────────── */
 
+const GROUP_COLORS = ["#6B7280", "#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#14B8A6"];
+
+function ColorPicker({
+  value,
+  onChange,
+  size = "sm",
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  size?: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "w-5 h-5" : "w-6 h-6";
+  return (
+    <div className="flex items-center gap-1">
+      {GROUP_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          onClick={() => onChange(color)}
+          className={`${dim} rounded-full border-2 transition-all flex-shrink-0 ${
+            value === color
+              ? "border-foreground scale-110 ring-1 ring-foreground/20"
+              : "border-transparent hover:border-muted-foreground/50"
+          }`}
+          style={{ backgroundColor: color }}
+          title={color}
+        />
+      ))}
+    </div>
+  );
+}
+
 function GroupManager() {
   const { toast } = useToast();
   const utils = trpc.useUtils();
   const [showCreate, setShowCreate] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
+  const [newGroupColor, setNewGroupColor] = useState(GROUP_COLORS[0]);
+  const [editingGroup, setEditingGroup] = useState<{
+    id: string;
+    name: string;
+    color: string;
+  } | null>(null);
 
   const { data: groups, isLoading } = trpc.clientGroups.list.useQuery();
 
@@ -570,9 +607,11 @@ function GroupManager() {
       utils.clientGroups.list.invalidate();
       utils.clients.getForSidebar.invalidate();
       setNewGroupName("");
+      setNewGroupColor(GROUP_COLORS[0]);
       setShowCreate(false);
     },
-    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const updateGroup = trpc.clientGroups.update.useMutation({
@@ -582,116 +621,223 @@ function GroupManager() {
       utils.clients.getForSidebar.invalidate();
       setEditingGroup(null);
     },
-    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const deleteGroup = trpc.clientGroups.delete.useMutation({
     onSuccess: () => {
-      toast({ title: "Grupo eliminado", description: "Los clientes del grupo ahora aparecen sin agrupar." });
+      toast({
+        title: "Grupo eliminado",
+        description: "Los clientes del grupo ahora aparecen sin agrupar.",
+      });
       utils.clientGroups.list.invalidate();
       utils.clients.list.invalidate();
       utils.clients.getForSidebar.invalidate();
     },
-    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   if (isLoading) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
           <FolderOpen className="h-3.5 w-3.5" />
           Grupos:
         </span>
-        {groups?.map((group) => (
-          <div
-            key={group.id}
-            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-accent text-accent-foreground font-medium group/tag"
-          >
-            <Folder className="h-3 w-3" />
-            {editingGroup?.id === group.id ? (
-              <input
-                autoFocus
-                value={editingGroup.name}
-                onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && editingGroup.name.trim()) {
-                    updateGroup.mutate({ id: group.id, name: editingGroup.name.trim() });
-                  }
-                  if (e.key === "Escape") setEditingGroup(null);
+        {groups?.map((group) => {
+          const isEditing = editingGroup?.id === group.id;
+          const groupColor = (group as any).color || "#6B7280";
+
+          return (
+            <div key={group.id} className="relative">
+              <div
+                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full font-medium group/tag border transition-colors cursor-pointer"
+                style={{
+                  borderColor: groupColor + "40",
+                  backgroundColor: groupColor + "15",
                 }}
-                onBlur={() => {
-                  if (editingGroup.name.trim() && editingGroup.name !== group.name) {
-                    updateGroup.mutate({ id: group.id, name: editingGroup.name.trim() });
-                  } else {
-                    setEditingGroup(null);
+                onClick={() => {
+                  if (!isEditing) {
+                    setEditingGroup({
+                      id: group.id,
+                      name: group.name,
+                      color: groupColor,
+                    });
                   }
                 }}
-                className="bg-transparent border-none outline-none w-20 text-xs"
-              />
-            ) : (
-              <span
-                className="cursor-pointer"
-                onClick={() => setEditingGroup({ id: group.id, name: group.name })}
                 title="Click para editar"
               >
-                {group.name}
-              </span>
-            )}
-            <span className="text-muted-foreground ml-0.5">{group._count.clients}</span>
-            <button
-              onClick={() => {
-                if (confirm(`¿Eliminar el grupo "${group.name}"? Los clientes no se eliminarán.`)) {
-                  deleteGroup.mutate({ id: group.id });
-                }
-              }}
-              className="ml-0.5 opacity-0 group-hover/tag:opacity-100 hover:text-destructive transition-opacity"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: groupColor }}
+                />
+                <span>{group.name}</span>
+                <span className="text-muted-foreground ml-0.5">
+                  {group._count.clients}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (
+                      confirm(
+                        `Eliminar el grupo "${group.name}"? Los clientes no se eliminaran.`
+                      )
+                    ) {
+                      deleteGroup.mutate({ id: group.id });
+                    }
+                  }}
+                  className="ml-0.5 opacity-0 group-hover/tag:opacity-100 hover:text-destructive transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Inline edit popover */}
+              {isEditing && (
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border rounded-xl shadow-lg p-3 space-y-3 min-w-[220px]">
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+                      Nombre
+                    </label>
+                    <Input
+                      autoFocus
+                      value={editingGroup.name}
+                      onChange={(e) =>
+                        setEditingGroup({ ...editingGroup, name: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && editingGroup.name.trim()) {
+                          updateGroup.mutate({
+                            id: group.id,
+                            name: editingGroup.name.trim(),
+                            color: editingGroup.color,
+                          });
+                        }
+                        if (e.key === "Escape") setEditingGroup(null);
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                      Color
+                    </label>
+                    <ColorPicker
+                      value={editingGroup.color}
+                      onChange={(c) =>
+                        setEditingGroup({ ...editingGroup, color: c })
+                      }
+                      size="md"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs flex-1"
+                      onClick={() => {
+                        if (editingGroup.name.trim()) {
+                          updateGroup.mutate({
+                            id: group.id,
+                            name: editingGroup.name.trim(),
+                            color: editingGroup.color,
+                          });
+                        }
+                      }}
+                      disabled={!editingGroup.name.trim() || updateGroup.isLoading}
+                    >
+                      {updateGroup.isLoading ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Guardar"
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setEditingGroup(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {showCreate ? (
-          <div className="inline-flex items-center gap-1">
-            <Input
-              autoFocus
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              placeholder="Nombre del grupo"
-              className="h-7 text-xs w-36"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newGroupName.trim()) {
-                  createGroup.mutate({ name: newGroupName.trim() });
-                }
-                if (e.key === "Escape") {
-                  setShowCreate(false);
-                  setNewGroupName("");
-                }
-              }}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => {
-                if (newGroupName.trim()) {
-                  createGroup.mutate({ name: newGroupName.trim() });
-                }
-              }}
-              disabled={!newGroupName.trim() || createGroup.isLoading}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => { setShowCreate(false); setNewGroupName(""); }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+          <div className="relative">
+            <div className="bg-popover border rounded-xl shadow-lg p-3 space-y-3 min-w-[220px]">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+                  Nombre
+                </label>
+                <Input
+                  autoFocus
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="Nombre del grupo"
+                  className="h-8 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newGroupName.trim()) {
+                      createGroup.mutate({
+                        name: newGroupName.trim(),
+                        color: newGroupColor,
+                      });
+                    }
+                    if (e.key === "Escape") {
+                      setShowCreate(false);
+                      setNewGroupName("");
+                      setNewGroupColor(GROUP_COLORS[0]);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                  Color
+                </label>
+                <ColorPicker value={newGroupColor} onChange={setNewGroupColor} size="md" />
+              </div>
+              <div className="flex items-center gap-1.5 pt-1">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs flex-1"
+                  onClick={() => {
+                    if (newGroupName.trim()) {
+                      createGroup.mutate({
+                        name: newGroupName.trim(),
+                        color: newGroupColor,
+                      });
+                    }
+                  }}
+                  disabled={!newGroupName.trim() || createGroup.isLoading}
+                >
+                  {createGroup.isLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Crear grupo"
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setShowCreate(false);
+                    setNewGroupName("");
+                    setNewGroupColor(GROUP_COLORS[0]);
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
           </div>
         ) : (
           <Button
