@@ -238,7 +238,7 @@ function LogoSection({
         <img
           src={isDark ? "/logo-full-white.svg" : "/logo-full-normal.svg"}
           alt="Isysocial"
-          className="h-14 w-auto"
+          className="h-10 w-auto"
         />
         {/* Agency full logo — centered below with separator */}
         {customLogo && (
@@ -263,7 +263,7 @@ function LogoSection({
       <img
         src={isDark ? "/logo-icon-white.svg" : "/logo-icon-color.svg"}
         alt="Isysocial"
-        className="w-12 h-12"
+        className="w-9 h-9"
       />
     </div>
   );
