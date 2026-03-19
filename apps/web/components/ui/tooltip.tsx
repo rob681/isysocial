@@ -53,18 +53,28 @@ export function TooltipTrigger({
 export function TooltipContent({
   children,
   className,
+  side = "top",
 }: {
   children: React.ReactNode;
   className?: string;
+  side?: "top" | "right" | "bottom" | "left";
 }) {
   const { open } = React.useContext(TooltipContext);
 
   if (!open) return null;
 
+  const positionClasses = {
+    top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
+    right: "left-full top-1/2 -translate-y-1/2 ml-2",
+    bottom: "top-full left-1/2 -translate-x-1/2 mt-2",
+    left: "right-full top-1/2 -translate-y-1/2 mr-2",
+  };
+
   return (
     <div
       className={cn(
-        "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50",
+        "absolute z-50",
+        positionClasses[side],
         "px-3 py-1.5 rounded-md shadow-md",
         "bg-popover text-popover-foreground text-xs",
         "border animate-in fade-in-0 zoom-in-95",

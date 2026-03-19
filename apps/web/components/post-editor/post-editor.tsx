@@ -463,6 +463,49 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
             />
           </div>
 
+          {/* Isystory Studio Button */}
+          {watchedValues.postType === "STORY" && watchedValues.network === "INSTAGRAM" && (
+            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 text-center space-y-3">
+              <p className="text-sm font-medium">Diseña tu historia con Isystory Studio</p>
+              <p className="text-xs text-muted-foreground">Agrega texto, stickers, fondos y más</p>
+              <div className="flex items-center gap-2 justify-center">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const cId = watchedValues.clientId;
+                    if (!cId) { toast({ title: "Selecciona un cliente primero", variant: "destructive" }); return; }
+                    const base = window.location.pathname.startsWith("/admin") ? "/admin" : "/editor";
+                    if (postId) {
+                      router.push(`${base}/stories/${postId}/editar`);
+                    } else {
+                      router.push(`${base}/stories/nuevo?clientId=${cId}&network=${watchedValues.network}`);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <FileEdit className="h-4 w-4" />
+                  {postId ? "Editar en Isystory Studio" : "Historia individual"}
+                </Button>
+                {!postId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const cId = watchedValues.clientId;
+                      if (!cId) { toast({ title: "Selecciona un cliente primero", variant: "destructive" }); return; }
+                      const base = window.location.pathname.startsWith("/admin") ? "/admin" : "/editor";
+                      router.push(`${base}/stories/nuevo?clientId=${cId}&network=${watchedValues.network}&mode=batch&count=3`);
+                    }}
+                    className="gap-2"
+                  >
+                    <FileEdit className="h-4 w-4" />
+                    Batería (3 historias)
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Media Upload */}
           <div className="space-y-2">
             <Label>Media</Label>

@@ -411,10 +411,35 @@ export default function ContenidoPage() {
         </Card>
       ) : viewMode === "grid" ? (
         <div className="space-y-4">
+          {/* Select All for grid */}
+          {data.posts.length > 0 && (
+            <div className="flex items-center gap-2 px-1">
+              <button
+                onClick={toggleSelectAll}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {allSelected ? (
+                  <CheckSquare className="h-5 w-5 text-primary" />
+                ) : (
+                  <Square className="h-5 w-5" />
+                )}
+              </button>
+              <span className="text-xs text-muted-foreground">
+                {allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+              </span>
+              {selectedIds.size > 0 && (
+                <span className="text-xs text-primary font-medium">
+                  ({selectedIds.size} seleccionados)
+                </span>
+              )}
+            </div>
+          )}
           <ContentGrid
             posts={data.posts as any}
             basePath="/admin/contenido"
             showClient
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
           />
           {/* Pagination */}
           {data.pages > 1 && (

@@ -13,9 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Loader2, Copy, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, Loader2, Copy, Check, X, ChevronDown, ChevronUp, Hash, Clock, Ruler } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+
+type AiTab = "copy" | "hashtags" | "horarios" | "formato";
 
 const TONE_OPTIONS = [
   { value: "__none__", label: "Sin preferencia" },
@@ -38,6 +40,7 @@ interface AiAssistantProps {
 export function AiAssistant({ onInsert, network, clientId, onClose }: AiAssistantProps) {
   const { toast } = useToast();
 
+  const [activeTab, setActiveTab] = useState<AiTab>("copy");
   const [prompt, setPrompt] = useState("");
   const [versions, setVersions] = useState(1);
   const [maxChars, setMaxChars] = useState(500);
@@ -47,8 +50,24 @@ export function AiAssistant({ onInsert, network, clientId, onClose }: AiAssistan
   const [results, setResults] = useState<string[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [hashtagResult, setHashtagResult] = useState("");
+  const [timesResult, setTimesResult] = useState("");
 
   const { data: credits } = trpc.ai.getCredits.useQuery();
+  const { data: formatData } = trpc.ai.suggestFormat.useQuery(
+    { network: network || "INSTAGRAM", postType: "IMAGE" },
+    { enabled: activeTab === "formato" }
+  );
+
+  const hashtagMutation = trpc.ai.suggestHashtags.useMutation({
+    onSuccess: (data) => setHashtagResult(data.hashtags),
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+  const timesMutation = trpc.ai.suggestBestTimes.useMutation({
+    onSuccess: (data) => setTimesResult(data.suggestions),
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   const generateMutation = trpc.ai.generateCopy.useMutation({
     onSuccess: (data) => {
       setResults(data.results);
@@ -103,8 +122,119 @@ export function AiAssistant({ onInsert, network, clientId, onClose }: AiAssistan
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b px-2">
+        {([
+          { key: "copy" as const, label: "Copy", icon: Sparkles },
+          { key: "hashtags" as const, label: "Hashtags", icon: Hash },
+          { key: "horarios" as const, label: "Horarios", icon: Clock },
+          { key: "formato" as const, label: "Formato", icon: Ruler },
+        ]).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={cn(
+              "flex items-center gap-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors",
+              activeTab === key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Icon className="h-3 w-3" />
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* ─── Hashtags Tab ─── */}
+        {activeTab === "hashtags" && (
+          <>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Texto de la publicación (opcional)</Label>
+              <Textarea
+                placeholder="Pega el copy de tu publicación para generar hashtags más relevantes..."
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+            <Button
+              onClick={() => hashtagMutation.mutate({ copy: prompt, network, clientId })}
+              disabled={hashtagMutation.isLoading}
+              className="w-full gradient-primary text-white"
+            >
+              {hashtagMutation.isLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generando...</> : <><Hash className="h-4 w-4 mr-2" />Generar Hashtags</>}
+            </Button>
+            {hashtagResult && (
+              <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-muted-foreground">Hashtags sugeridos</Label>
+                  <button onClick={() => { navigator.clipboard.writeText(hashtagResult); toast({ title: "Copiados" }); }} className="text-xs text-primary hover:underline">Copiar todos</button>
+                </div>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{hashtagResult}</p>
+                <Button size="sm" variant="outline" className="w-full h-7 text-xs" onClick={() => onInsert(hashtagResult)}>Insertar en el copy</Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Horarios Tab ─── */}
+        {activeTab === "horarios" && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Obtén sugerencias de los mejores horarios para publicar en {network || "tu red social"}, basado en mejores prácticas y tu historial.
+            </p>
+            <Button
+              onClick={() => timesMutation.mutate({ network: network || "INSTAGRAM", clientId })}
+              disabled={timesMutation.isLoading}
+              className="w-full gradient-primary text-white"
+            >
+              {timesMutation.isLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analizando...</> : <><Clock className="h-4 w-4 mr-2" />Sugerir Horarios</>}
+            </Button>
+            {timesResult && (
+              <div className="border rounded-lg p-3 bg-muted/30">
+                <Label className="text-xs font-medium text-muted-foreground mb-2 block">Horarios recomendados</Label>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{timesResult}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Formato Tab ─── */}
+        {activeTab === "formato" && formatData && (
+          <>
+            <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground">Dimensiones recomendadas</Label>
+                <p className="text-lg font-bold">{formatData.dimensions}</p>
+              </div>
+              {formatData.maxDuration && (
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Duración máxima</Label>
+                  <p className="text-sm font-medium">{formatData.maxDuration}</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-1 block">Tips</Label>
+                <ul className="space-y-1">
+                  {formatData.tips.map((tip, i) => (
+                    <li key={i} className="text-sm flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ─── Copy Tab (existing) ─── */}
+        {activeTab === "copy" && (<>
         {/* Prompt */}
         <div className="space-y-2">
           <Label className="text-xs font-medium">Solicitud</Label>
@@ -255,6 +385,7 @@ export function AiAssistant({ onInsert, network, clientId, onClose }: AiAssistan
             ))}
           </div>
         )}
+        </>)}
       </div>
     </div>
   );

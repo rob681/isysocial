@@ -100,6 +100,29 @@ export const updatePostCategorySchema = z.object({
 
 // ─── Post ─────────────────────────────────────────────────────────────────────
 
+export const storyElementSchema = z.object({
+  id: z.string(),
+  type: z.enum(["text", "sticker", "image", "shape"]),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  rotation: z.number().default(0),
+  opacity: z.number().min(0).max(1).default(1),
+  props: z.record(z.unknown()),
+});
+
+export const storyDataSchema = z.object({
+  version: z.literal(1),
+  width: z.literal(1080),
+  height: z.literal(1920),
+  background: z.object({
+    type: z.enum(["color", "gradient", "image"]),
+    value: z.string(),
+  }),
+  elements: z.array(storyElementSchema),
+});
+
 export const createPostSchema = z.object({
   clientId: z.string().min(1, "Cliente requerido"),
   network: z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"]),
@@ -112,6 +135,7 @@ export const createPostSchema = z.object({
   referenceLink: z.string().url().optional().or(z.literal("")),
   categoryId: z.string().optional(),
   initialStatus: z.enum(["DRAFT", "IN_REVIEW"]).default("DRAFT"),
+  storyData: storyDataSchema.optional(),
 });
 
 export const updatePostContentSchema = z.object({
@@ -122,6 +146,7 @@ export const updatePostContentSchema = z.object({
   referenceLink: z.string().url().optional().or(z.literal("")),
   scheduledAt: z.date().optional().nullable(),
   categoryId: z.string().optional().nullable(),
+  storyData: storyDataSchema.optional().nullable(),
 });
 
 export const updatePostStatusSchema = z.object({

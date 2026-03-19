@@ -63,6 +63,7 @@ export const postsRouter = router({
           revisionsLimit: input.revisionsLimit,
           referenceLink: input.referenceLink || null,
           categoryId: input.categoryId || null,
+          storyData: (input.storyData as any) ?? undefined,
           status: initialStatus,
         },
       });
@@ -297,6 +298,7 @@ export const postsRouter = router({
           }),
           ...(input.scheduledAt !== undefined && { scheduledAt: input.scheduledAt }),
           ...(input.categoryId !== undefined && { categoryId: input.categoryId || null }),
+          ...(input.storyData !== undefined && { storyData: input.storyData as any }),
         },
       });
     }),
@@ -1546,5 +1548,71 @@ export const postsRouter = router({
           changedBy: { select: { name: true, avatarUrl: true } },
         },
       });
+    }),
+
+  // ─── Story Batch ──────────────────────────────────────────────────────
+
+  createStoryBatch: adminOrPermissionProcedure("EDIT_POSTS")
+    .input(
+      z.object({
+        clientId: z.string(),
+        network: z.string(),
+        count: z.number().int().min(2).max(10),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+      const posts = await Promise.all(
+        Array.from({ length: input.count }, (_, i) =>
+          ctx.db.post.create({
+            data: {
+              agencyId,
+              clientId: input.clientId,
+              network: input.network as any,
+              postType: "STORY",
+              title: `Historia ${i + 1} de ${input.count}`,
+              status: "DRAFT",
+              storyBatchId: batchId,
+              storySequence: i,
+            },
+          })
+        )
+      );
+
+      return { batchId, posts };
+    }),
+
+  getStoryBatch: protectedProcedure
+    .input(z.object({ batchId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const posts = await ctx.db.post.findMany({
+        where: { agencyId, storyBatchId: input.batchId },
+        orderBy: { storySequence: "asc" },
+        include: {
+          client: { select: { companyName: true } },
+          media: { take: 1, orderBy: { sortOrder: "asc" } },
+        },
+      });
+      if (posts.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Batería no encontrada" });
+      return posts;
+    }),
+
+  updateBatchStatus: adminOrPermissionProcedure("EDIT_POSTS")
+    .input(
+      z.object({
+        batchId: z.string(),
+        status: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      await ctx.db.post.updateMany({
+        where: { agencyId, storyBatchId: input.batchId },
+        data: { status: input.status as any },
+      });
+      return { success: true };
     }),
 });

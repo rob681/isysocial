@@ -331,6 +331,9 @@ model Post {
   revisionsLimit           Int     @default(3)
   hasRequestedGuidedReview Boolean @default(false)
   referenceLink            String?
+  storyData                Json?
+  storyBatchId             String?
+  storySequence            Int?     @default(0)
 
   categoryId    String?
   category      PostCategory? @relation(fields: [categoryId], references: [id])
