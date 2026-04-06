@@ -18,13 +18,13 @@ const oauthConfig: Record<
   facebook: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,read_insights",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
     clientId: process.env.META_APP_ID ?? "",
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,read_insights",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
     clientId: process.env.META_APP_ID ?? "",
   },
   linkedin: {
