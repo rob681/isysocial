@@ -7,7 +7,7 @@ import { db } from "@isysocial/db";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
 
-const REDIRECT_BASE = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+const REDIRECT_BASE = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim();
 
 // ── Token Exchange Config ─────────────────────────────────────────────────────
 interface TokenConfig {

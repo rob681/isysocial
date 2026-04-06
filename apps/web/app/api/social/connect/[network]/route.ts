@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
 
-const REDIRECT_BASE = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+const REDIRECT_BASE = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim();
 
 // ── OAuth Config per network ──────────────────────────────────────────────────
 const oauthConfig: Record<

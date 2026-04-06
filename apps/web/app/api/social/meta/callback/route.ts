@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
 
-const REDIRECT_BASE = process.env.NEXTAUTH_URL ?? "http://localhost:3001";
+const REDIRECT_BASE = (process.env.NEXTAUTH_URL ?? "http://localhost:3001").trim();
 const META_GRAPH_VERSION = "v21.0";
 
 export async function GET(req: NextRequest) {
