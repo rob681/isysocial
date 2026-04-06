@@ -1,14 +1,13 @@
 // ─── Pending Pages API ────────────────────────────────────────────────────────
-// Returns the list of pending OAuth pages stored in the cookie (without tokens).
+// Returns pending OAuth pages stored in DB (via SystemConfig) without tokens.
 
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@isysocial/db";
 
-export async function GET() {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get("pending_oauth_data")?.value;
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("token");
 
-  if (!raw) {
+  if (!token) {
     return NextResponse.json(
       { error: "No hay datos de OAuth pendientes. El enlace puede haber expirado." },
       { status: 404 }
@@ -16,8 +15,29 @@ export async function GET() {
   }
 
   try {
-    const data = JSON.parse(raw);
-    // Return pages without the accessToken for security
+    const record = await db.systemConfig.findUnique({
+      where: { key: `pending_oauth_${token}` },
+    });
+
+    if (!record) {
+      return NextResponse.json(
+        { error: "No hay datos de OAuth pendientes. El enlace puede haber expirado." },
+        { status: 404 }
+      );
+    }
+
+    const data = JSON.parse(record.value as string);
+
+    // Check expiration
+    if (data.expiresAt && Date.now() > data.expiresAt) {
+      await db.systemConfig.delete({ where: { key: `pending_oauth_${token}` } }).catch(() => {});
+      return NextResponse.json(
+        { error: "Los datos de OAuth han expirado. Intenta conectar de nuevo." },
+        { status: 410 }
+      );
+    }
+
+    // Return pages without accessTokens for security
     const safePages = (data.pages ?? []).map((p: any) => ({
       id: p.id,
       name: p.name,

@@ -24,6 +24,7 @@ export default function SeleccionarPaginaPage() {
   const searchParams = useSearchParams();
   const clientId = params.id as string;
   const network = searchParams.get("network") ?? "facebook";
+  const token = searchParams.get("token") ?? "";
 
   const [pages, setPages] = useState<PendingPage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,8 +36,13 @@ export default function SeleccionarPaginaPage() {
 
   useEffect(() => {
     async function fetchPages() {
+      if (!token) {
+        setError("No hay datos de OAuth pendientes. El enlace puede haber expirado.");
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await fetch("/api/social/pending-pages");
+        const res = await fetch(`/api/social/pending-pages?token=${token}`);
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.error ?? "Error al cargar las páginas.");
@@ -50,7 +56,7 @@ export default function SeleccionarPaginaPage() {
       }
     }
     fetchPages();
-  }, []);
+  }, [token]);
 
   async function handleSelect(pageId: string) {
     setSelecting(pageId);
@@ -58,7 +64,7 @@ export default function SeleccionarPaginaPage() {
       const res = await fetch("/api/social/finalize-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageId }),
+        body: JSON.stringify({ pageId, token }),
       });
       if (!res.ok) {
         const data = await res.json();

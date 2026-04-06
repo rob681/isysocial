@@ -220,30 +220,22 @@ export async function GET(
         accountName = page.name;
         pageAccessToken = page.access_token;
       } else {
-        // Multiple pages — set cookie on redirect response
-        const pagesForCookie = pages.map((p: any) => ({
+        // Multiple pages — store in SystemConfig and pass token in URL
+        const selectionToken = crypto.randomUUID();
+        const pagesForSelection = pages.map((p: any) => ({
           id: p.id,
           name: p.name,
           accessToken: p.access_token,
           picture: p.picture?.data?.url ?? null,
         }));
-        const cookieValue = JSON.stringify({
-          accessToken,
-          clientId,
-          network: networkKey,
-          pages: pagesForCookie,
+        await db.systemConfig.upsert({
+          where: { key: `pending_oauth_${selectionToken}` },
+          update: { value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
+          create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
         });
-        const redirectRes = NextResponse.redirect(
-          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook`
+        return NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook&token=${selectionToken}`
         );
-        redirectRes.cookies.set("pending_oauth_data", cookieValue, {
-          httpOnly: true,
-          secure: true,
-          maxAge: 600,
-          path: "/",
-          sameSite: "lax",
-        });
-        return redirectRes;
       }
     } else if (networkKey === "instagram") {
       // Get Facebook Pages first, then linked IG accounts
@@ -311,23 +303,15 @@ export async function GET(
           igUsername: ig.igUsername,
           igProfilePic: ig.igProfilePic,
         }));
-        const cookieValue = JSON.stringify({
-          accessToken,
-          clientId,
-          network: networkKey,
-          pages: pagesForCookie,
+        const selectionToken = crypto.randomUUID();
+        await db.systemConfig.upsert({
+          where: { key: `pending_oauth_${selectionToken}` },
+          update: { value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForCookie, expiresAt: Date.now() + 600000 }) },
+          create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForCookie, expiresAt: Date.now() + 600000 }) },
         });
-        const redirectRes = NextResponse.redirect(
-          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=instagram`
+        return NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=instagram&token=${selectionToken}`
         );
-        redirectRes.cookies.set("pending_oauth_data", cookieValue, {
-          httpOnly: true,
-          secure: true,
-          maxAge: 600,
-          path: "/",
-          sameSite: "lax",
-        });
-        return redirectRes;
       }
     } else if (networkKey === "linkedin") {
       const meRes = await fetch("https://api.linkedin.com/v2/me", {

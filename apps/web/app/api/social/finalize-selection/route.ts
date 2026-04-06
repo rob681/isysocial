@@ -2,7 +2,6 @@
 // After the user picks a page from the selection UI, this saves it to the DB.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@isysocial/db";
 
 const networkEnumMap: Record<string, string> = {
@@ -11,10 +10,26 @@ const networkEnumMap: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get("pending_oauth_data")?.value;
+  const body = await req.json();
+  const { pageId, token } = body;
 
-  if (!raw) {
+  if (!token) {
+    return NextResponse.json(
+      { error: "No hay datos de OAuth pendientes. El enlace puede haber expirado." },
+      { status: 404 }
+    );
+  }
+
+  if (!pageId) {
+    return NextResponse.json({ error: "pageId es requerido." }, { status: 400 });
+  }
+
+  // Read from DB
+  const record = await db.systemConfig.findUnique({
+    where: { key: `pending_oauth_${token}` },
+  });
+
+  if (!record) {
     return NextResponse.json(
       { error: "No hay datos de OAuth pendientes. El enlace puede haber expirado." },
       { status: 404 }
@@ -23,16 +38,15 @@ export async function POST(req: NextRequest) {
 
   let oauthData: any;
   try {
-    oauthData = JSON.parse(raw);
+    oauthData = JSON.parse(record.value as string);
   } catch {
     return NextResponse.json({ error: "Datos de OAuth inválidos." }, { status: 500 });
   }
 
-  const body = await req.json();
-  const { pageId } = body;
-
-  if (!pageId) {
-    return NextResponse.json({ error: "pageId es requerido." }, { status: 400 });
+  // Check expiration
+  if (oauthData.expiresAt && Date.now() > oauthData.expiresAt) {
+    await db.systemConfig.delete({ where: { key: `pending_oauth_${token}` } }).catch(() => {});
+    return NextResponse.json({ error: "Los datos de OAuth han expirado." }, { status: 410 });
   }
 
   const { clientId, network, pages } = oauthData;
@@ -42,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Red no soportada." }, { status: 400 });
   }
 
-  // Find the selected page from the stored pages
+  // Find the selected page
   const selectedPage = (pages as any[]).find((p) => p.id === pageId);
   if (!selectedPage) {
     return NextResponse.json({ error: "Página no encontrada en la sesión OAuth." }, { status: 400 });
@@ -59,7 +73,6 @@ export async function POST(req: NextRequest) {
       accountName = selectedPage.name;
       profilePic = selectedPage.picture ?? null;
     } else if (network === "instagram") {
-      // For Instagram, the page object has igId, igUsername, igProfilePic
       accountId = selectedPage.igId;
       accountName = selectedPage.igUsername?.startsWith("@")
         ? selectedPage.igUsername
@@ -114,8 +127,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Clear the cookie
-    cookieStore.delete("pending_oauth_data");
+    // Clean up the pending data
+    await db.systemConfig.delete({ where: { key: `pending_oauth_${token}` } }).catch(() => {});
 
     return NextResponse.json({ success: true, clientId, network });
   } catch (err: any) {
