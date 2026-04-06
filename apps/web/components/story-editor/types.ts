@@ -48,21 +48,12 @@ export type StickerType =
   | "mention"
   | "hashtag"
   | "location"
-  | "poll"
-  | "questions"
-  | "quiz"
-  | "countdown"
-  | "link"
   | "emoji"
-  | "emoji_slider"
-  | "add_yours"
   | "music"
   | "gif"
   | "frame"
-  | "notify"
   | "cutout"
-  | "avatar"
-  | "food_order";
+  | "avatar";
 
 export interface StickerProps {
   kind: "sticker";

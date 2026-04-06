@@ -30,6 +30,13 @@ export const ideasRouter = router({
         }
       }
 
+      // Derive networks array from input (prefer networks array, fallback to single network)
+      const networks = input.networks?.length
+        ? input.networks
+        : input.network
+          ? [input.network]
+          : [];
+
       const idea = await ctx.db.idea.create({
         data: {
           agencyId,
@@ -39,7 +46,8 @@ export const ideasRouter = router({
           title: input.title,
           description: input.description || null,
           copyIdeas: input.copyIdeas || null,
-          network: input.network || null,
+          network: networks[0] || null,
+          networks,
           postType: input.postType || null,
           tentativeDate: input.tentativeDate || null,
           status: "BACKLOG",
@@ -166,7 +174,13 @@ export const ideasRouter = router({
       // Filters
       if (input.clientId) where.clientId = input.clientId;
       if (input.status) where.status = input.status;
-      if (input.network) where.network = input.network;
+      if (input.network) {
+        where.OR = [
+          ...(where.OR || []),
+          { network: input.network },
+          { networks: { has: input.network } },
+        ];
+      }
 
       if (input.search) {
         where.AND = [
@@ -243,6 +257,11 @@ export const ideasRouter = router({
       if (input.description !== undefined) data.description = input.description;
       if (input.copyIdeas !== undefined) data.copyIdeas = input.copyIdeas;
       if (input.network !== undefined) data.network = input.network;
+      if (input.networks !== undefined) {
+        data.networks = input.networks;
+        // Keep legacy network field in sync (first network)
+        data.network = input.networks[0] || null;
+      }
       if (input.postType !== undefined) data.postType = input.postType;
       if (input.tentativeDate !== undefined) data.tentativeDate = input.tentativeDate;
       if (input.status !== undefined) data.status = input.status;
@@ -511,10 +530,17 @@ export const ideasRouter = router({
         });
       }
 
-      if (!idea.network) {
+      // Determine networks: prefer new array, fallback to single field
+      const ideaNetworks = (idea as any).networks?.length
+        ? (idea as any).networks as string[]
+        : idea.network
+          ? [idea.network]
+          : [];
+
+      if (ideaNetworks.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "La idea necesita una red social definida antes de convertir a post.",
+          message: "La idea necesita al menos una red social definida antes de convertir a post.",
         });
       }
 
@@ -525,8 +551,14 @@ export const ideasRouter = router({
         });
       }
 
+      const primaryNetwork = ideaNetworks[0]!;
+      const mirrorNetworks = ideaNetworks.slice(1);
+
       // Create post from idea in a transaction
       const result = await ctx.db.$transaction(async (tx) => {
+        // Create primary post
+        const mirrorGroupId = mirrorNetworks.length > 0 ? `idea-${idea.id}` : undefined;
+
         const post = await tx.post.create({
           data: {
             agencyId,
@@ -534,10 +566,11 @@ export const ideasRouter = router({
             editorId: user.id,
             title: idea.title,
             copy: idea.copyIdeas || null,
-            network: idea.network!,
+            network: primaryNetwork as any,
             postType: idea.postType!,
             scheduledAt: idea.tentativeDate,
             status: "DRAFT",
+            ...(mirrorGroupId && { mirrorGroupId }),
           },
         });
 
@@ -556,13 +589,55 @@ export const ideasRouter = router({
           });
         }
 
-        // Log status creation
+        // Create mirror posts for additional networks
+        for (const net of mirrorNetworks) {
+          const mirrorPost = await tx.post.create({
+            data: {
+              agencyId,
+              clientId,
+              editorId: user.id,
+              title: idea.title,
+              copy: idea.copyIdeas || null,
+              network: net as any,
+              postType: idea.postType!,
+              scheduledAt: idea.tentativeDate,
+              status: "DRAFT",
+              mirrorGroupId: mirrorGroupId!,
+            },
+          });
+
+          // Copy media to mirror post too
+          if (idea.media.length > 0) {
+            await tx.postMedia.createMany({
+              data: idea.media.map((m, i) => ({
+                postId: mirrorPost.id,
+                fileName: m.fileName,
+                fileUrl: m.fileUrl,
+                storagePath: m.storagePath,
+                mimeType: m.mimeType,
+                fileSize: 0,
+                sortOrder: i,
+              })),
+            });
+          }
+
+          await tx.postStatusLog.create({
+            data: {
+              postId: mirrorPost.id,
+              toStatus: "DRAFT",
+              changedById: user.id,
+              note: `Espejo desde idea: "${idea.title}" (${primaryNetwork} → ${net})`,
+            },
+          });
+        }
+
+        // Log status creation for primary post
         await tx.postStatusLog.create({
           data: {
             postId: post.id,
             toStatus: "DRAFT",
             changedById: user.id,
-            note: `Creado desde idea: "${idea.title}"`,
+            note: `Creado desde idea: "${idea.title}"${mirrorNetworks.length > 0 ? ` (+${mirrorNetworks.length} espejo${mirrorNetworks.length > 1 ? "s" : ""})` : ""}`,
           },
         });
 
@@ -587,7 +662,7 @@ export const ideasRouter = router({
                 userId: client.user.id,
                 type: "IDEA_CONVERTED_TO_POST",
                 title: "Idea convertida a post",
-                body: `La idea "${idea.title}" fue convertida a publicación.`,
+                body: `La idea "${idea.title}" fue convertida a publicación${mirrorNetworks.length > 0 ? ` en ${ideaNetworks.length} redes sociales` : ""}.`,
                 relatedId: post.id,
                 relatedType: "post",
               },

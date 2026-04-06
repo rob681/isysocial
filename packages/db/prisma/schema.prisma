@@ -202,16 +202,18 @@ model User {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  clientProfile  ClientProfile?
-  editorProfile  EditorProfile?
-  notifications  Notification[]
-  tokens         Token[]
-  postComments   PostComment[]
-  ideaComments   IdeaComment[]
-  postStatusLogs PostStatusLog[]
-  postRevisions  PostRevision[]
-  ideas          Idea[]           @relation("UserIdeas")
-  publishLogs    PostPublishLog[]
+  clientProfile   ClientProfile?
+  editorProfile   EditorProfile?
+  notifications   Notification[]
+  tokens          Token[]
+  postComments    PostComment[]
+  ideaComments    IdeaComment[]
+  videoComments   VideoComment[]  @relation("VideoCommentAuthor")
+  postStatusLogs  PostStatusLog[]
+  postRevisions   PostRevision[]
+  ideas           Idea[]          @relation("UserIdeas")
+  publishLogs     PostPublishLog[]
+  mediaVersions   PostMediaVersion[]
 
   @@map("iso_users")
   @@schema("isysocial")
@@ -339,6 +341,9 @@ model Post {
   category      PostCategory? @relation(fields: [categoryId], references: [id])
   mirrorGroupId String?
 
+  // Cross-app: Isytask integration (optional link to a Task)
+  isytaskTaskId String?   // ID of the linked Task in public schema
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -353,6 +358,7 @@ model Post {
   @@index([agencyId, status])
   @@index([scheduledAt])
   @@index([mirrorGroupId])
+  @@index([isytaskTaskId])
   @@map("iso_posts")
   @@schema("isysocial")
 }
@@ -367,9 +373,43 @@ model PostMedia {
   mimeType    String
   fileSize    Int
   sortOrder   Int      @default(0)
+  thumbnailUrl String?  // URL to generated thumbnail (for videos)
+  duration     Float?   // Duration in seconds (for videos)
   createdAt   DateTime @default(now())
 
+  versions PostMediaVersion[]
+
   @@map("iso_post_media")
+  @@schema("isysocial")
+}
+
+// ─── POST MEDIA VERSIONS (Image history before/after) ────────────────────────
+
+model PostMediaVersion {
+  id          String    @id @default(cuid())
+  mediaId     String
+  media       PostMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  fileUrl       String
+  storagePath   String
+  mimeType      String
+  fileSize      Int
+
+  // Attribution
+  changedById String
+  changedBy   User   @relation(fields: [changedById], references: [id])
+  changeNotes String? // "Aumentar contraste", "Ajustar saturación"
+
+  // Link to the comment that requested changes
+  relatedCommentId String?
+  relatedComment   PostComment? @relation(fields: [relatedCommentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([mediaId, versionNumber])
+  @@index([mediaId])
+  @@map("iso_post_media_versions")
   @@schema("isysocial")
 }
 
@@ -384,6 +424,8 @@ model PostComment {
   isResolved Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  mediaVersions PostMediaVersion[]
 
   @@map("iso_post_comments")
   @@schema("isysocial")
@@ -486,6 +528,7 @@ model Idea {
   description     String?
   copyIdeas       String?
   network         SocialNetwork?
+  networks        SocialNetwork[]  @default([])
   postType        PostType?
   tentativeDate   DateTime?
   status          IdeaStatus     @default(BACKLOG)
@@ -760,6 +803,33 @@ model BrandBrochureUpload {
 
   @@index([sessionId])
   @@map("iso_brand_brochure_uploads")
+  @@schema("isysocial")
+}
+
+// ─── VIDEO COMMENTS (Timeline feedback on videos) ──────────────────────────
+model VideoComment {
+  id              String   @id @default(cuid())
+
+  // Polymorphic relationship: links to either PostMedia or TaskFile
+  mediaType       String   // "POST_MEDIA" | "TASK_FILE"
+  mediaId         String   // Foreign key (flexible: can reference PostMedia.id or TaskFile.id)
+
+  // Comment data
+  authorId        String
+  author          User     @relation("VideoCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content         String
+
+  // CRITICAL: Timestamp field for video timeline feedback
+  timecodeSeconds Float?   // Seconds into video (e.g., 15.5 = 15.5 seconds)
+
+  // Metadata
+  isInternal      Boolean  @default(false)
+  isResolved      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([mediaId, timecodeSeconds])
+  @@map("iso_video_comments")
   @@schema("isysocial")
 }
 

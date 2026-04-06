@@ -43,6 +43,33 @@ export async function uploadFile(
   return { storagePath: `${bucket}/${path}`, url: publicUrl };
 }
 
+export async function createSignedUploadUrl(
+  bucket: string,
+  path: string
+): Promise<{ signedUrl: string; token: string; path: string; publicUrl: string }> {
+  const supabase = getClient();
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUploadUrl(path);
+
+  if (error || !data) {
+    console.error("[Supabase Storage] Signed URL error:", error);
+    throw new Error(`Failed to create signed URL: ${error?.message}`);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(bucket).getPublicUrl(path);
+
+  return {
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+    publicUrl,
+  };
+}
+
 export async function deleteFile(storagePath: string): Promise<void> {
   const supabase = getClient();
 

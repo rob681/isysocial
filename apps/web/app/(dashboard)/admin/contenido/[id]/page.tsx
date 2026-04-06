@@ -25,6 +25,8 @@ import {
   CheckCircle2,
   XCircle,
   ExternalLink,
+  Layers,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -46,8 +48,11 @@ import type { MockupMedia } from "@/components/mockups/types";
 import { useToast } from "@/hooks/use-toast";
 import { getTimezoneShortLabel } from "@/lib/utils";
 import { RevisionHistory } from "@/components/post-editor/revision-history";
+import { MediaVersionComparator } from "@/components/post-editor/media-version-comparator";
+import { MediaVersionUploadModal } from "@/components/post-editor/media-version-upload-modal";
 import { PublishPostDialog } from "@/components/publish-post-dialog";
 import { Topbar } from "@/components/layout/topbar";
+import { VideoReviewPanel } from "@/components/video/video-review-panel";
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -61,6 +66,13 @@ export default function PostDetailPage() {
   const [mirrorDialogOpen, setMirrorDialogOpen] = useState(false);
   const [mirrorNetworks, setMirrorNetworks] = useState<string[]>([]);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [versionUpload, setVersionUpload] = useState<{
+    mediaId: string;
+    fileName: string;
+    currentFileUrl: string;
+    commentId?: string;
+    changeNotes?: string;
+  } | null>(null);
 
   const userRole = (session?.user as any)?.role as Role;
 
@@ -440,6 +452,65 @@ export default function PostDetailPage() {
             currentHashtags={post.hashtags}
           />
 
+          {/* Image Version History */}
+          {post.media.some((m) => m.mimeType.startsWith("image/")) && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Layers className="h-4 w-4" />
+                    Historial de Imágenes
+                  </CardTitle>
+                  {(userRole === "ADMIN" || userRole === "EDITOR" || userRole === "SUPER_ADMIN") && (
+                    <div className="relative">
+                      <select
+                        className="text-xs border rounded-lg px-3 py-1.5 bg-white cursor-pointer hover:bg-gray-50 appearance-none pr-7"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const mediaId = e.target.value;
+                          if (!mediaId) return;
+                          const media = post.media.find((m) => m.id === mediaId);
+                          if (media) {
+                            setVersionUpload({
+                              mediaId: media.id,
+                              fileName: media.fileName,
+                              currentFileUrl: media.fileUrl,
+                            });
+                          }
+                          e.target.value = "";
+                        }}
+                      >
+                        <option value="" disabled>
+                          + Subir nueva versión
+                        </option>
+                        {post.media
+                          .filter((m) => m.mimeType.startsWith("image/"))
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.fileName}
+                            </option>
+                          ))}
+                      </select>
+                      <Upload className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {post.media
+                  .filter((m) => m.mimeType.startsWith("image/"))
+                  .map((media) => (
+                    <MediaVersionComparator
+                      key={media.id}
+                      mediaId={media.id}
+                      currentFileUrl={media.fileUrl}
+                      fileName={media.fileName}
+                    />
+                  ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Status timeline */}
           <Card>
             <CardHeader>
@@ -500,8 +571,8 @@ export default function PostDetailPage() {
           )}
         </div>
 
-        {/* Right: Mockup Preview */}
-        <div className="lg:w-[380px] xl:w-[420px] flex-shrink-0">
+        {/* Right: Mockup Preview (always shown) */}
+        <div className="lg:w-[420px] xl:w-[460px] flex-shrink-0">
           <div className="sticky top-6">
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">Vista previa</h3>
             <div className="flex justify-center p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border">
@@ -588,6 +659,18 @@ export default function PostDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Version Upload Modal */}
+      {versionUpload && (
+        <MediaVersionUploadModal
+          mediaId={versionUpload.mediaId}
+          mediaFileName={versionUpload.fileName}
+          currentFileUrl={versionUpload.currentFileUrl}
+          relatedCommentId={versionUpload.commentId}
+          changeNotes={versionUpload.changeNotes}
+          onClose={() => setVersionUpload(null)}
+          onSuccess={() => refetch()}
+        />
+      )}
       </div>
       </main>
     </div>

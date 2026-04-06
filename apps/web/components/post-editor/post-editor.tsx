@@ -26,10 +26,13 @@ import {
 } from "@isysocial/shared";
 import type { SocialNetwork, PostType } from "@isysocial/shared";
 import type { MockupMedia } from "@/components/mockups/types";
-import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles, PanelRightOpen, FileEdit, SendHorizonal } from "lucide-react";
+import { Loader2, Save, Send, ArrowLeft, LayoutTemplate, ChevronDown, ChevronUp, Sparkles, PanelRightOpen, FileEdit, SendHorizonal, X, AlertTriangle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { AiAssistant } from "./ai-assistant";
+import { SchedulePopover } from "./schedule-popover";
+import { getFormatRequirements } from "@/lib/media-formats";
+import { VideoEditor as VideoEditorComponent } from "@/components/video-editor/video-editor";
 
 const formSchema = z.object({
   clientId: z.string().min(1, "Selecciona un cliente"),
@@ -46,20 +49,33 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+interface ExistingMediaItem {
+  id: string;
+  url: string;
+  fileName: string;
+  mimeType: string;
+  sortOrder: number;
+}
+
 interface PostEditorProps {
   postId?: string;
   defaultValues?: Partial<FormValues>;
   defaultMedia?: MockupMedia[];
+  existingMedia?: ExistingMediaItem[];
 }
 
-export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorProps) {
+export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia: initialExistingMedia }: PostEditorProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [uploadedMedia, setUploadedMedia] = useState<
     { url: string; storagePath: string; fileName: string; mimeType: string; fileSize: number }[]
   >([]);
+  const [existingMedia, setExistingMedia] = useState<ExistingMediaItem[]>(initialExistingMedia ?? []);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [isycineOpen, setIsycineOpen] = useState(false);
+  const [isycineVideoUrl, setIsycineVideoUrl] = useState<string | null>(null);
+  const [isycineFileName, setIsycineFileName] = useState<string>("");
 
   const { data: clients } = trpc.posts.getClientsForSelect.useQuery();
   const { data: categories } = trpc.categories.list.useQuery();
@@ -118,6 +134,26 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
   });
 
   const addMedia = trpc.posts.addMedia.useMutation();
+  const deleteMediaMutation = trpc.posts.deleteMedia.useMutation({
+    onSuccess: () => toast({ title: "Archivo eliminado" }),
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+  const reorderMediaMutation = trpc.posts.reorderMedia.useMutation();
+
+  const handleDeleteExistingMedia = useCallback((mediaId: string) => {
+    deleteMediaMutation.mutate({ mediaId });
+    setExistingMedia((prev) => prev.filter((m) => m.id !== mediaId));
+  }, [deleteMediaMutation]);
+
+  const handleReorderExistingMedia = useCallback((reordered: ExistingMediaItem[]) => {
+    setExistingMedia(reordered);
+    if (postId) {
+      reorderMediaMutation.mutate({
+        postId,
+        orderedIds: reordered.map((m) => m.id),
+      });
+    }
+  }, [postId, reorderMediaMutation]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -144,13 +180,19 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
   // Available post types for selected network
   const availablePostTypes = NETWORK_POST_TYPES[watchedValues.network as SocialNetwork] || [];
 
-  // Build mockup media from uploaded files
-  const mockupMedia: MockupMedia[] = uploadedMedia.length > 0
-    ? uploadedMedia.map((m) => ({
-        url: m.url,
-        type: m.mimeType.startsWith("video/") ? "video" as const : "image" as const,
-      }))
-    : defaultMedia || [];
+  // Build mockup media: existing media (editable) + newly uploaded
+  const mockupMedia: MockupMedia[] = [
+    ...existingMedia.map((m) => ({
+      url: m.url,
+      type: m.mimeType.startsWith("video/") ? "video" as const : "image" as const,
+    })),
+    ...uploadedMedia.map((m) => ({
+      url: m.url,
+      type: m.mimeType.startsWith("video/") ? "video" as const : "image" as const,
+    })),
+  ];
+  // Fallback to defaultMedia only if we have nothing
+  const finalMockupMedia = mockupMedia.length > 0 ? mockupMedia : (defaultMedia || []);
 
   const onSubmit = (data: FormValues, sendForReview = false) => {
     if (postId) {
@@ -186,6 +228,10 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
 
   const handleMediaRemove = useCallback((index: number) => {
     setUploadedMedia((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleMediaReorder = useCallback((orderedMedia: typeof uploadedMedia) => {
+    setUploadedMedia(orderedMedia);
   }, []);
 
   const isLoading = createPost.isLoading || updateContent.isLoading;
@@ -302,35 +348,48 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
         )}
 
         <form onSubmit={form.handleSubmit((data) => onSubmit(data, false))} className="space-y-5">
-          {/* Client selector */}
+          {/* Client: banner when pre-selected, dropdown when not */}
           {!postId && (
-            <div className="space-y-2">
-              <Label>Cliente *</Label>
-              <Controller
-                name="clientId"
-                control={form.control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={(val) => {
-                    field.onChange(val);
-                    // Reset network/postType if client changes
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients?.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.companyName} — {client.contactName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            defaultValues?.clientId && selectedClient ? (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-primary">
+                    {selectedClient.companyName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{selectedClient.companyName}</p>
+                  <p className="text-xs text-muted-foreground">{selectedClient.contactName}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Cliente *</Label>
+                <Controller
+                  name="clientId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={(val) => {
+                      field.onChange(val);
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un cliente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.companyName} — {client.contactName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {form.formState.errors.clientId && (
+                  <p className="text-sm text-red-500">{form.formState.errors.clientId.message}</p>
                 )}
-              />
-              {form.formState.errors.clientId && (
-                <p className="text-sm text-red-500">{form.formState.errors.clientId.message}</p>
-              )}
-            </div>
+              </div>
+            )
           )}
 
           {/* Network + Post Type */}
@@ -506,26 +565,149 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
             </div>
           )}
 
-          {/* Media Upload */}
+          {/* Isycine Studio Button (for any post with video — new or existing) */}
+          {(uploadedMedia.some((m) => m.mimeType.startsWith("video/")) ||
+            existingMedia.some((m) => m.mimeType.startsWith("video/"))) && (
+            <div className="rounded-xl border-2 border-dashed border-violet-400/30 bg-violet-50 dark:bg-violet-950/20 p-4 text-center space-y-3">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">🎬</span>
+                <p className="text-sm font-medium">Isycine Studio</p>
+              </div>
+              <p className="text-xs text-muted-foreground">Edita, recorta y agrega efectos a tu video</p>
+              <Button
+                type="button"
+                onClick={() => {
+                  const newVideo = uploadedMedia.find((m) => m.mimeType.startsWith("video/"));
+                  const existingVideo = existingMedia.find((m) => m.mimeType.startsWith("video/"));
+                  if (newVideo) {
+                    setIsycineVideoUrl(newVideo.url);
+                    setIsycineFileName(newVideo.fileName);
+                  } else if (existingVideo) {
+                    setIsycineVideoUrl(existingVideo.url);
+                    setIsycineFileName(existingVideo.fileName);
+                  } else return;
+                  setIsycineOpen(true);
+                }}
+                className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+              >
+                <FileEdit className="h-4 w-4" />
+                Abrir Isycine Studio
+              </Button>
+            </div>
+          )}
+
+          {/* Existing Media (editable) */}
+          {postId && existingMedia.length > 0 && (
+            <div className="space-y-2">
+              <Label>Archivos actuales</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {existingMedia.map((m, idx) => (
+                  <div
+                    key={m.id}
+                    className="relative group rounded-lg overflow-hidden border bg-zinc-50 dark:bg-zinc-900"
+                  >
+                    {m.mimeType.startsWith("video/") ? (
+                      <video src={m.url} className="w-full h-24 object-cover" muted />
+                    ) : (
+                      <img src={m.url} alt={m.fileName} className="w-full h-24 object-cover" />
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1">
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const reordered = [...existingMedia];
+                            const temp = reordered[idx - 1];
+                            reordered[idx - 1] = reordered[idx];
+                            reordered[idx] = temp;
+                            handleReorderExistingMedia(reordered);
+                          }}
+                          className="p-1 rounded bg-white/90 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white text-xs"
+                          title="Mover a la izquierda"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5 -rotate-90" />
+                        </button>
+                      )}
+                      {idx < existingMedia.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const reordered = [...existingMedia];
+                            const temp = reordered[idx];
+                            reordered[idx] = reordered[idx + 1];
+                            reordered[idx + 1] = temp;
+                            handleReorderExistingMedia(reordered);
+                          }}
+                          className="p-1 rounded bg-white/90 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white text-xs"
+                          title="Mover a la derecha"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExistingMedia(m.id)}
+                        className="p-1 rounded bg-red-500/90 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 text-xs"
+                        title="Eliminar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">
+                      {m.fileName}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Media Upload (new files) */}
           <div className="space-y-2">
-            <Label>Media</Label>
+            <Label>{postId && existingMedia.length > 0 ? "Agregar más archivos" : "Media"}</Label>
             <MediaUploader
               media={uploadedMedia}
               onUpload={handleMediaUpload}
               onRemove={handleMediaRemove}
+              onReorder={handleMediaReorder}
               postType={watchedValues.postType as PostType}
+              network={watchedValues.network}
             />
           </div>
 
+          {/* Format Requirements Banner */}
+          {(() => {
+            const reqs = getFormatRequirements(watchedValues.network, watchedValues.postType);
+            if (!reqs) return null;
+            return (
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                      Requisitos para {reqs.label}
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-blue-600 dark:text-blue-400">
+                      <span>📐 {reqs.dimensions}</span>
+                      {reqs.duration && <span>⏱ {reqs.duration}</span>}
+                      {reqs.formats && <span>📁 {reqs.formats}</span>}
+                      {reqs.captionLimit && <span>✏️ máx {reqs.captionLimit} chars</span>}
+                      {reqs.maxItems && <span>📸 máx {reqs.maxItems} archivos</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Schedule & Limits */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Fecha programada</Label>
-              <Input
-                type="datetime-local"
-                {...form.register("scheduledAt")}
-              />
-            </div>
+            <SchedulePopover
+              value={watchedValues.scheduledAt || ""}
+              onChange={(v) => form.setValue("scheduledAt", v)}
+              network={watchedValues.network}
+              clientId={watchedValues.clientId}
+            />
             {!postId && (
               <div className="space-y-2">
                 <Label>Límite de revisiones</Label>
@@ -574,7 +756,39 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
               </Button>
             )}
           </div>
-        </form>
+        
+    </form>
+
+      {/* Isycine Studio v2 — Full-screen Video Editor (OUTSIDE form to prevent submit) */}
+      {isycineOpen && isycineVideoUrl && (
+        <div className="fixed inset-0 z-50">
+          <VideoEditorComponent
+            videoUrl={isycineVideoUrl}
+            clientName={selectedClient?.companyName || ""}
+            onClose={() => setIsycineOpen(false)}
+            onExport={async (blob: Blob) => {
+              try {
+                const formData = new FormData();
+                formData.append("file", new File([blob], `edited-${Date.now()}.webm`, { type: "video/webm" }));
+                formData.append("folder", "posts");
+                const res = await fetch("/api/upload", { method: "POST", body: formData });
+                const data = await res.json();
+                if (data.url) {
+                  // Replace: remove all existing videos, keep non-video files
+                  setUploadedMedia(prev => [
+                    ...prev.filter(m => !m.mimeType.startsWith("video/")),
+                    { url: data.url, storagePath: data.storagePath, fileName: data.fileName, mimeType: "video/webm", fileSize: data.fileSize },
+                  ]);
+                  setExistingMedia(prev => prev.filter(m => !m.mimeType.startsWith("video/")));
+                  toast({ title: "Video editado", description: "El video original fue reemplazado por la versión editada." });
+                }
+              } catch {
+                toast({ title: "Error", description: "No se pudo subir el video editado.", variant: "destructive" });
+              }
+            }}
+          />
+        </div>
+      )}
       </div>
 
       {/* ─── Right: Live Preview ───────────────────────────────────── */}
@@ -588,7 +802,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
               clientName={selectedClient?.companyName || "Nombre del cliente"}
               copy={watchedValues.copy}
               hashtags={watchedValues.hashtags}
-              media={mockupMedia}
+              media={finalMockupMedia}
               scheduledAt={watchedValues.scheduledAt ? new Date(watchedValues.scheduledAt) : undefined}
             />
           </div>
@@ -600,6 +814,8 @@ export function PostEditor({ postId, defaultValues, defaultMedia }: PostEditorPr
         <AiAssistant
           network={watchedValues.network}
           clientId={watchedValues.clientId}
+          mediaUrls={finalMockupMedia.map((m) => m.url)}
+          currentCopy={watchedValues.copy}
           onInsert={(text) => {
             // Split text into copy and hashtags
             const hashtagMatch = text.match(/((?:#\w+\s*)+)$/);

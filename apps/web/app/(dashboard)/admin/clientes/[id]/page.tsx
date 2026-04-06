@@ -29,37 +29,42 @@ import { ClientSocialNetworksEditor } from "@/components/social-networks/client-
 // ── Network metadata ──────────────────────────────────────────────────────────
 const NETWORK_META: Record<
   string,
-  { label: string; color: string; icon: string; note?: string }
+  { label: string; color: string; icon: string; note?: string; available: boolean }
 > = {
   FACEBOOK: {
     label: "Facebook",
     color: "#1877F2",
     icon: "🟦",
     note: "Publica en tu Página de Facebook",
+    available: true,
   },
   INSTAGRAM: {
     label: "Instagram",
     color: "#E1306C",
     icon: "📸",
-    note: "Requiere cuenta Business vinculada a una Página",
+    note: "Requiere cuenta Business vinculada a una Página de Facebook",
+    available: true,
   },
   LINKEDIN: {
     label: "LinkedIn",
     color: "#0A66C2",
     icon: "🔵",
-    note: "Publica en perfil personal o página de empresa",
+    note: "Próximamente — integración en desarrollo",
+    available: false,
   },
   X: {
     label: "X (Twitter)",
     color: "#000000",
     icon: "𝕏",
-    note: "Máx. 280 caracteres · 50 tweets/día (plan gratuito)",
+    note: "Próximamente — integración en desarrollo",
+    available: false,
   },
   TIKTOK: {
     label: "TikTok",
     color: "#010101",
     icon: "🎵",
-    note: "Solo admite posts de tipo VIDEO",
+    note: "Próximamente — integración en desarrollo",
+    available: false,
   },
 };
 
@@ -105,7 +110,7 @@ export default function ClientDetailPage() {
     refetch: refetchNetworks,
   } = trpc.publishing.getNetworkStatus.useQuery(
     { clientId },
-    { enabled: activeTab === "redes" }
+    { enabled: activeTab === "redes", staleTime: 30_000 }
   );
 
   // ── Disconnect handler ────────────────────────────────────────────────────
@@ -209,13 +214,9 @@ export default function ClientDetailPage() {
             <User className="h-4 w-4 mr-2" />
             Información
           </TabsTrigger>
-          <TabsTrigger value="paginas">
-            <Share2 className="h-4 w-4 mr-2" />
-            Páginas Vinculadas
-          </TabsTrigger>
           <TabsTrigger value="redes">
-            <Globe className="h-4 w-4 mr-2" />
-            Conexiones OAuth
+            <Share2 className="h-4 w-4 mr-2" />
+            Redes Sociales
           </TabsTrigger>
         </TabsList>
 
@@ -281,26 +282,21 @@ export default function ClientDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* ── Páginas Vinculadas Tab ─────────────────────────────────────── */}
-        <TabsContent value="paginas" className="space-y-4">
-          <ClientSocialNetworksEditor clientId={clientId} />
-        </TabsContent>
-
         {/* ── Redes Sociales Tab ────────────────────────────────────────────── */}
         <TabsContent value="redes" className="space-y-6">
-          {/* Page Assignment Section */}
+          {/* Assigned pages (agency accounts linked to this client) */}
           <div>
-            <h3 className="text-base font-semibold mb-2">Asignar Páginas</h3>
+            <h3 className="text-base font-semibold mb-1">Páginas asignadas</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Selecciona las páginas que este cliente puede usar para publicar contenido.
+              Páginas de la agencia asignadas a este cliente para publicar contenido.
             </p>
-            <ClientPageSelector clientId={clientId} />
+            <ClientSocialNetworksEditor clientId={clientId} />
           </div>
 
-          {/* Connect New Networks Section */}
+          {/* Connect / disconnect OAuth per network */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-base font-semibold">Conectar Nuevas Redes</h3>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold">Conexión directa por red</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -311,13 +307,13 @@ export default function ClientDetailPage() {
               </Button>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Conecta páginas de redes sociales a nivel de agencia (disponible para todos los clientes).
+              Conecta las cuentas de redes sociales directamente a este cliente mediante OAuth.
             </p>
           </div>
 
           {networksLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-20 w-full" />
               ))}
             </div>
@@ -327,22 +323,27 @@ export default function ClientDetailPage() {
                 const meta = NETWORK_META[networkKey]!;
                 const status = networkStatus?.find((n) => n.network === networkKey);
                 const isConnected = status?.connected ?? false;
+                const isAvailable = meta.available;
 
                 return (
-                  <Card key={networkKey}>
+                  <Card key={networkKey} className={!isAvailable ? "opacity-60" : ""}>
                     <CardContent className="py-4 flex items-center gap-4">
-                      {/* Icon + Name */}
+                      {/* Icon */}
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
-                        style={{ backgroundColor: meta.color }}
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-lg flex-shrink-0"
+                        style={{ backgroundColor: isAvailable ? meta.color : "#9ca3af" }}
                       >
                         {meta.icon}
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{meta.label}</span>
-                          {isConnected ? (
+                          {!isAvailable ? (
+                            <Badge variant="secondary" className="text-[10px] py-0 bg-amber-100 text-amber-700 border-amber-200">
+                              Próximamente
+                            </Badge>
+                          ) : isConnected ? (
                             <Badge variant="default" className="bg-green-500 hover:bg-green-500 text-white text-[10px] py-0">
                               ✓ Conectado
                             </Badge>
@@ -367,15 +368,14 @@ export default function ClientDetailPage() {
                         )}
                       </div>
 
-                      {/* Action button */}
+                      {/* Action */}
                       <div className="flex-shrink-0">
-                        {isConnected ? (
+                        {!isAvailable ? null : isConnected ? (
                           <div className="flex items-center gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleConnect(networkKey)}
-                              title="Reconectar"
                             >
                               <RefreshCw className="h-3.5 w-3.5 mr-1" />
                               Reconectar
@@ -401,7 +401,7 @@ export default function ClientDetailPage() {
                             onClick={() => handleConnect(networkKey)}
                           >
                             <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                            Conectar {meta.label}
+                            Conectar
                           </Button>
                         )}
                       </div>

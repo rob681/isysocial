@@ -17,12 +17,18 @@ import { aiRouter } from "./routers/ai.router";
 import { brandBrochureRouter } from "./routers/brandBrochure.router";
 import { auditRouter } from "./routers/audit.router";
 import { platformRouter } from "./routers/platform.router";
+import { videoCommentsRouter } from "./routers/video-comments.router";
+import { storiesRouter } from "./routers/stories.router";
+import { mediaVersionsRouter } from "./routers/media-versions.router";
+import { billingRouter } from "./routers/billing.router";
+import { ecosystemRouter } from "./routers/ecosystem.router";
 
 export const appRouter = router({
   auth: authRouter,
   ai: aiRouter,
   audit: auditRouter,
   brandBrochure: brandBrochureRouter,
+  videoComments: videoCommentsRouter,
   clients: clientsRouter,
   clientGroups: clientGroupsRouter,
   publishing: publishingRouter,
@@ -37,6 +43,10 @@ export const appRouter = router({
   templates: templatesRouter,
   profile: profileRouter,
   platform: platformRouter,
+  stories: storiesRouter,
+  mediaVersions: mediaVersionsRouter,
+  billing: billingRouter,
+  ecosystem: ecosystemRouter,
 });
 
 export type AppRouter = typeof appRouter;

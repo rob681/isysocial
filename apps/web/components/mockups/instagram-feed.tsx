@@ -44,14 +44,17 @@ export function InstagramFeedMockup({
       </div>
 
       {/* Media */}
-      <div className="relative w-full aspect-square bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+      {/* Media — 4:5 portrait ratio (Instagram's current default for feed) */}
+      <div className="relative w-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden" style={{ aspectRatio: "4/5" }}>
         {currentMedia ? (
           currentMedia.type === "video" ? (
-            <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-              <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                <div className="w-0 h-0 border-l-[20px] border-l-white border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent ml-1" />
-              </div>
-            </div>
+            <video
+              src={currentMedia.url}
+              className="w-full h-full object-cover bg-black"
+              controls
+              playsInline
+              preload="metadata"
+            />
           ) : (
             <img src={currentMedia.url} alt="" className="w-full h-full object-cover" />
           )

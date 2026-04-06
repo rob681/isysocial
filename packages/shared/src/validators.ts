@@ -180,6 +180,9 @@ export const createIdeaSchema = z.object({
   network: z
     .enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"])
     .optional(),
+  networks: z
+    .array(z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"]))
+    .optional(),
   postType: z
     .enum(["IMAGE", "CAROUSEL", "STORY", "REEL", "VIDEO", "TEXT"])
     .optional(),
@@ -195,6 +198,9 @@ export const updateIdeaSchema = z.object({
     .enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"])
     .optional()
     .nullable(),
+  networks: z
+    .array(z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"]))
+    .optional(),
   postType: z
     .enum(["IMAGE", "CAROUSEL", "STORY", "REEL", "VIDEO", "TEXT"])
     .optional()
@@ -241,4 +247,24 @@ export const updateBrandKitSchema = z.object({
   brandValues: z.string().optional(),
   missionStatement: z.string().optional(),
   doAndDonts: z.string().optional(),
+});
+
+// ─── Video Comments (Timeline feedback) ──────────────────────────────────────
+
+export const createVideoCommentSchema = z.object({
+  mediaType: z.enum(["POST_MEDIA", "TASK_FILE"]),
+  mediaId: z.string().min(1, "Media ID requerido"),
+  content: z.string().min(1, "Comentario requerido"),
+  timecodeSeconds: z.number().min(0).optional(), // seconds (e.g., 15.5)
+  isInternal: z.boolean().default(false),
+});
+
+export const updateVideoCommentSchema = z.object({
+  commentId: z.string(),
+  content: z.string().min(1).optional(),
+  isResolved: z.boolean().optional(),
+});
+
+export const deleteVideoCommentSchema = z.object({
+  commentId: z.string(),
 });

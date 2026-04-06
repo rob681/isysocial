@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -98,8 +98,11 @@ function ImageLightbox({
 export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canDelete = false, canUploadMedia = false }: IdeaDetailProps) {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const ideaId = params.id as string;
+  const clientId = searchParams.get("clientId");
+  const backPath = clientId ? `${basePath}?clientId=${clientId}` : basePath;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [comment, setComment] = useState("");
@@ -122,7 +125,7 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
   const updateIdea = trpc.ideas.update.useMutation({ onSuccess: () => { setIsEditing(false); refetch(); toast({ title: "Idea actualizada" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const updateStatus = trpc.ideas.updateStatus.useMutation({ onSuccess: () => { refetch(); toast({ title: "Estado actualizado" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const convertToPost = trpc.ideas.convertToPost.useMutation({ onSuccess: (post) => { toast({ title: "Idea convertida a post" }); router.push(`${basePath.replace("/ideas", "/contenido")}/${post.id}`); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
-  const deleteIdea = trpc.ideas.delete.useMutation({ onSuccess: () => { toast({ title: "Idea eliminada" }); router.push(basePath); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
+  const deleteIdea = trpc.ideas.delete.useMutation({ onSuccess: () => { toast({ title: "Idea eliminada" }); router.push(backPath); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const addMedia = trpc.ideas.addMedia.useMutation({ onSuccess: () => { refetch(); toast({ title: "Imagen agregada" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const removeMedia = trpc.ideas.removeMedia.useMutation({ onSuccess: () => { refetch(); toast({ title: "Imagen eliminada" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
 
@@ -191,7 +194,7 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push(basePath)}>
+        <Button variant="ghost" size="icon" onClick={() => router.push(backPath)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">

@@ -16,6 +16,8 @@ import { canTransition } from "@isysocial/shared";
 import type { Role, PostStatus } from "@isysocial/shared";
 import { sendEmailNotification } from "../lib/email";
 import { sendPushNotification } from "../lib/fcm";
+import { notifyIsytask, buildPostPayload } from "../lib/cross-app-notify";
+import { publishToNetwork } from "../lib/publishers";
 
 export const postsRouter = router({
   // ─── Create Post ─────────────────────────────────────────────────────────
@@ -605,6 +607,152 @@ export const postsRouter = router({
         }).catch(() => {});
       }
 
+      // ── Cross-app sync: notify Isytask (fire-and-forget) ──────────────────
+      if (updated.isytaskTaskId || post.isytaskTaskId) {
+        const agency = await ctx.db.agency.findUnique({
+          where: { id: agencyId },
+          select: { name: true },
+        });
+
+        if (agency) {
+          const crossAppPayload = buildPostPayload({
+            ...post,
+            isytaskTaskId: updated.isytaskTaskId ?? post.isytaskTaskId,
+          });
+
+          const eventMap: Record<string, string | undefined> = {
+            IN_REVIEW: "POST_IN_REVIEW",
+            APPROVED: "POST_APPROVED",
+            CLIENT_CHANGES: "POST_CHANGES_REQUESTED",
+            PUBLISHED: "POST_PUBLISHED",
+          };
+
+          // Use statusToUpdate for accurate event (APPROVED → SCHEDULED case)
+          const crossEvent = eventMap[statusToUpdate] ?? eventMap[toStatus];
+          if (crossEvent) {
+            notifyIsytask({
+              eventType: crossEvent as any,
+              agencyName: agency.name,
+              payload: {
+                ...crossAppPayload,
+                feedback: input.note ?? undefined,
+              },
+            }).catch(() => {}); // fire and forget — Isysocial works independently
+          }
+        }
+      }
+
+      // ── Auto-publish if scheduled time has already passed ──────────────────
+      // When a post transitions to SCHEDULED and its scheduledAt is in the past
+      // (or within the next 2 minutes), publish it immediately instead of waiting
+      // for the daily cron.
+      if (statusToUpdate === "SCHEDULED" && post.scheduledAt) {
+        const now = new Date();
+        const scheduled = new Date(post.scheduledAt);
+        const twoMinutesFromNow = new Date(now.getTime() + 2 * 60 * 1000);
+
+        if (scheduled <= twoMinutesFromNow) {
+          // Fire-and-forget: publish immediately, don't block the response
+          (async () => {
+            try {
+              // Fetch connected social network
+              const sn = await ctx.db.clientSocialNetwork.findFirst({
+                where: {
+                  clientId: post.clientId,
+                  network: post.network,
+                  isActive: true,
+                  accessToken: { not: null },
+                },
+              });
+
+              let networkAccount = sn as any;
+              let snSource: "client" | "agency" = "client";
+
+              if (!networkAccount) {
+                const agencyAccount = await ctx.db.agencySocialAccount.findFirst({
+                  where: {
+                    agencyId: post.agencyId,
+                    network: post.network,
+                    isActive: true,
+                    accessToken: { not: "" },
+                  },
+                });
+                if (agencyAccount) {
+                  networkAccount = agencyAccount;
+                  snSource = "agency";
+                }
+              }
+
+              if (!networkAccount) return;
+
+              // Fetch post media
+              const media = await ctx.db.postMedia.findMany({
+                where: { postId: post.id },
+                orderBy: { sortOrder: "asc" },
+              });
+
+              const agencyUser = await ctx.db.user.findFirst({
+                where: { agencyId: post.agencyId, role: "ADMIN" },
+                select: { id: true },
+              });
+              if (!agencyUser) return;
+
+              const log = await ctx.db.postPublishLog.create({
+                data: {
+                  postId: post.id,
+                  ...(snSource === "agency"
+                    ? { agencyAccountId: networkAccount.id }
+                    : { networkId: networkAccount.id }),
+                  network: networkAccount.network,
+                  status: "PENDING",
+                  requestedById: agencyUser.id,
+                },
+              });
+
+              const result = await publishToNetwork({
+                network: networkAccount.network,
+                copy: post.copy ?? "",
+                hashtags: post.hashtags ?? "",
+                mediaUrls: media.map((m) => m.fileUrl),
+                postType: post.postType,
+                accountId: networkAccount.accountId ?? "",
+                accessToken: networkAccount.accessToken!,
+                pageId: networkAccount.pageId ?? undefined,
+              });
+
+              await ctx.db.postPublishLog.update({
+                where: { id: log.id },
+                data: {
+                  status: result.success ? "SUCCESS" : "FAILED",
+                  platformPostId: result.platformPostId ?? null,
+                  platformUrl: result.platformUrl ?? null,
+                  errorMessage: result.error ?? null,
+                  publishedAt: result.success ? new Date() : null,
+                },
+              });
+
+              if (result.success) {
+                await ctx.db.post.update({
+                  where: { id: post.id },
+                  data: { status: "PUBLISHED", publishedAt: new Date() },
+                });
+                await ctx.db.postStatusLog.create({
+                  data: {
+                    postId: post.id,
+                    fromStatus: "SCHEDULED",
+                    toStatus: "PUBLISHED",
+                    changedById: agencyUser.id,
+                    note: "Publicado automáticamente al aprobar",
+                  },
+                });
+              }
+            } catch (err) {
+              console.error("[posts.updateStatus] Auto-publish error:", err);
+            }
+          })();
+        }
+      }
+
       return updated;
     }),
 
@@ -900,6 +1048,33 @@ export const postsRouter = router({
       return { success: true };
     }),
 
+  // ─── Get Signed Upload URL (for large files / videos) ────────────────────
+  getUploadUrl: protectedProcedure
+    .input(
+      z.object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        folder: z.string().default("posts"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { createSignedUploadUrl } = await import("../lib/supabase-storage");
+      const ext = input.fileName.split(".").pop() || "bin";
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const path = `${input.folder}/${filename}`;
+      const bucket = "isysocial-media";
+
+      const { signedUrl, token, publicUrl } = await createSignedUploadUrl(bucket, path);
+
+      return {
+        signedUrl,
+        token,
+        publicUrl,
+        storagePath: `${bucket}/${path}`,
+        fileName: input.fileName,
+      };
+    }),
+
   // ─── Upload Media ────────────────────────────────────────────────────────
   addMedia: adminOrPermissionProcedure("CREATE_POSTS")
     .input(
@@ -1137,7 +1312,7 @@ export const postsRouter = router({
       id: c.id,
       companyName: c.companyName,
       contactName: c.user.name,
-      networks: c.socialNetworks.map((sn) => sn.network),
+      networks: [...new Set(c.socialNetworks.map((sn) => sn.network))],
     }));
   }),
 
@@ -1154,6 +1329,7 @@ export const postsRouter = router({
 
       const source = await ctx.db.post.findFirst({
         where: { id: input.sourcePostId, agencyId },
+        include: { media: { orderBy: { sortOrder: "asc" } } },
       });
       if (!source) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Post fuente no encontrado" });
@@ -1210,6 +1386,21 @@ export const postsRouter = router({
           },
         });
 
+        // Copy media from source post
+        if (source.media.length > 0) {
+          await ctx.db.postMedia.createMany({
+            data: source.media.map((m) => ({
+              postId: post.id,
+              fileName: m.fileName,
+              fileUrl: m.fileUrl,
+              storagePath: m.storagePath,
+              mimeType: m.mimeType,
+              fileSize: m.fileSize,
+              sortOrder: m.sortOrder,
+            })),
+          });
+        }
+
         await ctx.db.postStatusLog.create({
           data: {
             postId: post.id,
@@ -1252,25 +1443,57 @@ export const postsRouter = router({
 
       const source = await ctx.db.post.findFirst({
         where: { id: input.sourcePostId, agencyId },
+        include: { media: { orderBy: { sortOrder: "asc" } } },
       });
       if (!source) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Post fuente no encontrado" });
       }
 
-      // Update all siblings with the source's copy/hashtags
-      const result = await ctx.db.post.updateMany({
+      // Get sibling posts that are still editable
+      const siblings = await ctx.db.post.findMany({
         where: {
           mirrorGroupId: input.mirrorGroupId,
           agencyId,
           id: { not: source.id },
-          status: { in: ["DRAFT", "CLIENT_CHANGES"] }, // Only sync editable posts
+          status: { in: ["DRAFT", "CLIENT_CHANGES"] },
+        },
+        select: { id: true },
+      });
+
+      // Update all siblings with the source's copy/hashtags/schedule
+      const result = await ctx.db.post.updateMany({
+        where: {
+          id: { in: siblings.map((s) => s.id) },
         },
         data: {
           copy: source.copy,
           hashtags: source.hashtags,
           title: source.title,
+          scheduledAt: source.scheduledAt,
         },
       });
+
+      // Sync media: replace each sibling's media with source media
+      if (source.media.length > 0) {
+        for (const sibling of siblings) {
+          // Delete existing media
+          await ctx.db.postMedia.deleteMany({
+            where: { postId: sibling.id },
+          });
+          // Copy source media
+          await ctx.db.postMedia.createMany({
+            data: source.media.map((m) => ({
+              postId: sibling.id,
+              fileName: m.fileName,
+              fileUrl: m.fileUrl,
+              storagePath: m.storagePath,
+              mimeType: m.mimeType,
+              fileSize: m.fileSize,
+              sortOrder: m.sortOrder,
+            })),
+          });
+        }
+      }
 
       return { synced: result.count };
     }),

@@ -64,6 +64,15 @@ export default function EditPostPage() {
     type: m.mimeType.startsWith("video/") ? "video" as const : "image" as const,
   }));
 
+  // Pass existing media with IDs for editing (delete/reorder)
+  const existingMedia = post.media.map((m) => ({
+    id: m.id,
+    url: m.fileUrl,
+    fileName: m.fileName,
+    mimeType: m.mimeType,
+    sortOrder: m.sortOrder,
+  }));
+
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Editar publicación" />
@@ -72,6 +81,7 @@ export default function EditPostPage() {
           postId={post.id}
           defaultValues={defaultValues}
           defaultMedia={defaultMedia}
+          existingMedia={existingMedia}
         />
       </main>
     </div>

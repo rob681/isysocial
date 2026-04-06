@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ import {
   X,
   Loader2,
   Download,
+  Film,
 } from "lucide-react";
 import {
   NETWORK_LABELS,
@@ -173,7 +175,10 @@ function BulkActionBar({
 }
 
 /* ─── Page ────────────────────────────────────────────────────────── */
-export default function ContenidoPage() {
+function ContenidoPageInner() {
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get("clientId") ?? undefined;
+
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
@@ -182,6 +187,12 @@ export default function ContenidoPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Reset page when clientId changes (navigation between clients)
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+  }, [clientId]);
 
   useEffect(() => {
     const saved = localStorage.getItem("isysocial-content-view");
@@ -195,11 +206,17 @@ export default function ContenidoPage() {
   const utils = trpc.useUtils();
   const { data: categories } = trpc.categories.list.useQuery();
 
+  const { data: clientData } = trpc.clients.get.useQuery(
+    { id: clientId! },
+    { enabled: !!clientId }
+  );
+
   const { data, isLoading } = trpc.posts.list.useQuery({
     search: search || undefined,
     network: filterNetwork !== "ALL" ? (filterNetwork as SocialNetwork) : undefined,
     status: filterStatus !== "ALL" ? (filterStatus as PostStatus) : undefined,
     categoryId: filterCategory !== "ALL" ? filterCategory : undefined,
+    clientId,
     page,
     limit: 20,
   });
@@ -280,9 +297,13 @@ export default function ContenidoPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Contenido</h1>
+          <h1 className="text-2xl font-bold">
+            {clientId && clientData ? clientData.companyName : "Contenido"}
+          </h1>
           <p className="text-muted-foreground text-sm">
-            Gestiona las publicaciones de tus clientes
+            {clientId && clientData
+              ? `Publicaciones de ${clientData.companyName}`
+              : "Gestiona las publicaciones de tus clientes"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -313,7 +334,7 @@ export default function ContenidoPage() {
               CSV
             </Button>
           )}
-          <Link href="/admin/contenido/nuevo">
+          <Link href={`/admin/contenido/nuevo${clientId ? `?clientId=${clientId}` : ""}`}>
             <Button className="gradient-primary text-white">
               <Plus className="h-4 w-4 mr-2" />
               Nueva publicación
@@ -621,5 +642,13 @@ export default function ContenidoPage() {
       </Dialog>
       </main>
     </div>
+  );
+}
+
+export default function ContenidoPage() {
+  return (
+    <Suspense>
+      <ContenidoPageInner />
+    </Suspense>
   );
 }

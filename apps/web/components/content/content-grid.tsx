@@ -155,6 +155,8 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
           </Card>
         );
 
+        const hasSelection = selectionEnabled && selectedIds.size > 0;
+
         return (
           <div key={post.id} className="relative group">
             {/* Selection checkbox - outside Link to prevent navigation */}
@@ -168,7 +170,9 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
                 className={`absolute top-3 left-3 z-20 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
                   isSelected
                     ? "bg-primary border-primary text-primary-foreground"
-                    : "bg-white/80 border-zinc-300 hover:border-primary backdrop-blur-sm"
+                    : hasSelection
+                      ? "bg-white/80 border-zinc-300 hover:border-primary backdrop-blur-sm"
+                      : "bg-white/80 border-zinc-300 hover:border-primary backdrop-blur-sm opacity-0 group-hover:opacity-100"
                 }`}
               >
                 {isSelected && <Check className="h-3.5 w-3.5" />}

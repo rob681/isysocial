@@ -27,18 +27,19 @@ import { useToast } from "@/hooks/use-toast";
 
 interface IdeaFormProps {
   redirectPath: string; // Where to go after creation
+  initialClientId?: string;
 }
 
-export function IdeaForm({ redirectPath }: IdeaFormProps) {
+export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
   const router = useRouter();
   const { toast } = useToast();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [copyIdeas, setCopyIdeas] = useState("");
-  const [network, setNetwork] = useState<string>("");
+  const [selectedNetworks, setSelectedNetworks] = useState<string[]>([]);
   const [postType, setPostType] = useState<string>("");
-  const [clientId, setClientId] = useState<string>("");
+  const [clientId, setClientId] = useState<string>(initialClientId ?? "");
   const [tentativeDate, setTentativeDate] = useState<string>("");
 
   // Image upload state
@@ -52,14 +53,23 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
   const create = trpc.ideas.create.useMutation();
   const addMedia = trpc.ideas.addMedia.useMutation();
 
-  // Available post types based on selected network
-  const availablePostTypes = network
-    ? NETWORK_POST_TYPES[network as SocialNetwork] || []
+  // Available post types — intersection of selected networks' post types
+  const availablePostTypes = selectedNetworks.length > 0
+    ? selectedNetworks.reduce<PostType[]>((common, net, i) => {
+        const types = NETWORK_POST_TYPES[net as SocialNetwork] || [];
+        return i === 0 ? types : common.filter((t) => types.includes(t));
+      }, [])
     : (Object.keys(POST_TYPE_LABELS) as PostType[]);
+
+  const toggleNetwork = (net: string) => {
+    setSelectedNetworks((prev) =>
+      prev.includes(net) ? prev.filter((n) => n !== net) : [...prev, net]
+    );
+  };
 
   const selectedClient = clients?.find((c) => c.id === clientId);
 
-  // ── Image handlers ──
+  // ── Media handlers ──
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,19 +77,26 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
     processFile(file);
   };
 
+  const isVideo = (file: File) => file.type.startsWith("video/");
+
   const processFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Solo se permiten imágenes", variant: "destructive" });
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      toast({ title: "Solo se permiten imágenes y videos", variant: "destructive" });
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      toast({ title: "La imagen no puede superar 50MB", variant: "destructive" });
+      toast({ title: "El archivo no puede superar 50MB", variant: "destructive" });
       return;
     }
     setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      // Video — use object URL for preview
+      setImagePreview(URL.createObjectURL(file));
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -116,7 +133,8 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
         description: description.trim() || undefined,
         copyIdeas: copyIdeas.trim() || undefined,
         clientId: clientId || undefined,
-        network: (network as SocialNetwork) || undefined,
+        networks: selectedNetworks.length > 0 ? selectedNetworks as any : undefined,
+        network: selectedNetworks[0] as SocialNetwork || undefined,
         postType: (postType as PostType) || undefined,
         tentativeDate: tentativeDate ? new Date(tentativeDate) : undefined,
       });
@@ -147,7 +165,10 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
       }
 
       toast({ title: "Idea creada" });
-      router.push(`${redirectPath}/${idea.id}`);
+      // Build detail URL preserving clientId if present
+      const baseIdeasPath = redirectPath.split("?")[0] ?? redirectPath;
+      const clientParam = initialClientId ? `?clientId=${initialClientId}` : "";
+      router.push(`${baseIdeasPath}/${idea.id}${clientParam}`);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -216,7 +237,7 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                 {/* Image Upload Zone */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
-                    Imagen de referencia
+                    Imagen o video de referencia
                   </label>
                   <div
                     className="border-2 border-dashed rounded-xl text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors overflow-hidden"
@@ -226,11 +247,20 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                   >
                     {imagePreview ? (
                       <div className="relative group">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full max-h-64 object-contain bg-zinc-50 dark:bg-zinc-900"
-                        />
+                        {imageFile && isVideo(imageFile) ? (
+                          <video
+                            src={imagePreview}
+                            className="w-full max-h-64 object-contain bg-zinc-50 dark:bg-zinc-900"
+                            controls
+                            muted
+                          />
+                        ) : (
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="w-full max-h-64 object-contain bg-zinc-50 dark:bg-zinc-900"
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={removeImage}
@@ -243,10 +273,10 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                       <div className="py-8 px-4">
                         <ImagePlus className="h-10 w-10 mx-auto text-muted-foreground/40" />
                         <p className="text-sm text-muted-foreground mt-3">
-                          Arrastra una imagen o haz clic para seleccionar
+                          Arrastra una imagen o video, o haz clic para seleccionar
                         </p>
                         <p className="text-xs text-muted-foreground/60 mt-1">
-                          PNG, JPG, WebP (máx. 50MB)
+                          PNG, JPG, WebP, MP4, MOV (máx. 50MB)
                         </p>
                       </div>
                     )}
@@ -254,7 +284,7 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     className="hidden"
                     onChange={handleFileSelect}
                   />
@@ -305,26 +335,42 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                     </div>
                   )}
 
-                  {/* Network */}
+                  {/* Networks (multi-select) */}
                   <div>
-                    <label className="text-sm font-medium mb-1.5 block">Red social</label>
-                    <select
-                      value={network}
-                      onChange={(e) => {
-                        setNetwork(e.target.value);
-                        setPostType(""); // Reset post type when network changes
-                      }}
-                      className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                    >
-                      <option value="">Sin definir</option>
-                      {(Object.entries(NETWORK_LABELS) as [string, string][]).map(
-                        ([key, label]) => (
-                          <option key={key} value={key}>
-                            {label}
-                          </option>
-                        )
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Redes sociales
+                      {selectedNetworks.length > 1 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                          (espejo: se creará en {selectedNetworks.length} redes)
+                        </span>
                       )}
-                    </select>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.entries(NETWORK_LABELS) as [string, string][]).map(
+                        ([key, label]) => {
+                          const isSelected = selectedNetworks.includes(key);
+                          const color = NETWORK_COLORS[key as SocialNetwork] || "#6B7280";
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                toggleNetwork(key);
+                                setPostType(""); // Reset when networks change
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                                isSelected
+                                  ? "text-white border-transparent shadow-sm"
+                                  : "border-border hover:bg-accent text-muted-foreground"
+                              }`}
+                              style={isSelected ? { backgroundColor: color } : undefined}
+                            >
+                              {label}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
                   </div>
 
                   {/* Post Type */}
@@ -398,17 +444,18 @@ export function IdeaForm({ redirectPath }: IdeaFormProps) {
                           {selectedClient.companyName}
                         </span>
                       )}
-                      {network && (
+                      {selectedNetworks.map((net) => (
                         <span
+                          key={net}
                           className="text-[11px] px-2 py-0.5 rounded-full text-white font-medium"
                           style={{
                             backgroundColor:
-                              NETWORK_COLORS[network as SocialNetwork] || "#6b7280",
+                              NETWORK_COLORS[net as SocialNetwork] || "#6b7280",
                           }}
                         >
-                          {NETWORK_LABELS[network as SocialNetwork]}
+                          {NETWORK_LABELS[net as SocialNetwork]}
                         </span>
-                      )}
+                      ))}
                       {postType && (
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
                           {POST_TYPE_LABELS[postType as PostType]}

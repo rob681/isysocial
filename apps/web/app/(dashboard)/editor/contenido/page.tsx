@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,21 @@ import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
 import { ContentGrid } from "@/components/content/content-grid";
 import { Topbar } from "@/components/layout/topbar";
 
+function NuevoLinkInner({ children }: { children: React.ReactNode }) {
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get("clientId");
+  const href = `/editor/contenido/nuevo${clientId ? `?clientId=${clientId}` : ""}`;
+  return <Link href={href}>{children}</Link>;
+}
+
+function NuevoLink({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<Link href="/editor/contenido/nuevo">{children}</Link>}>
+      <NuevoLinkInner>{children}</NuevoLinkInner>
+    </Suspense>
+  );
+}
+
 export default function EditorContenidoPage() {
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
@@ -59,6 +75,9 @@ export default function EditorContenidoPage() {
     limit: 20,
   });
 
+  // Note: clientId filtering happens at the NuevoLink level (for new post navigation).
+  // The listing itself shows all posts assigned to this editor (backend filters by role).
+
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Contenido" />
@@ -71,12 +90,12 @@ export default function EditorContenidoPage() {
             Gestiona los posts de tus clientes asignados
           </p>
         </div>
-        <Link href="/editor/contenido/nuevo">
+        <NuevoLink>
           <Button>
             <Plus className="h-4 w-4 mr-2" />
             Nueva publicación
           </Button>
-        </Link>
+        </NuevoLink>
       </div>
 
       {/* Filters */}
@@ -138,12 +157,12 @@ export default function EditorContenidoPage() {
             <p className="text-sm text-muted-foreground/60 mt-1">
               Crea tu primera publicación para empezar
             </p>
-            <Link href="/editor/contenido/nuevo" className="mt-4">
-              <Button variant="outline">
+            <NuevoLink>
+              <Button variant="outline" className="mt-4">
                 <Plus className="h-4 w-4 mr-2" />
                 Crear publicación
               </Button>
-            </Link>
+            </NuevoLink>
           </CardContent>
         </Card>
       ) : viewMode === "grid" ? (
@@ -174,9 +193,20 @@ export default function EditorContenidoPage() {
                 <Card className={`hover:shadow-md transition-shadow cursor-pointer ${needsAttention ? "ring-2 ring-orange-400/50" : ""}`}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <div className="w-16 h-16 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center relative">
                         {thumbnail ? (
-                          <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                          post.media?.[0]?.mimeType?.startsWith("video/") ? (
+                            <>
+                              <video src={thumbnail} className="w-full h-full object-cover" preload="metadata" muted />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                <div className="w-7 h-7 rounded-full bg-white/80 flex items-center justify-center">
+                                  <div className="w-0 h-0 border-l-[8px] border-l-zinc-700 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent ml-0.5" />
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                          )
                         ) : (
                           <FileImage className="h-6 w-6 text-muted-foreground/40" />
                         )}

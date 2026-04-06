@@ -56,6 +56,16 @@ async function extractWithClaudeVision(
 
   // For PDFs we convert to a general prompt; for images we use the vision block
   const isImage = mimeType.startsWith("image/");
+  const isVideo = mimeType.startsWith("video/");
+
+  // Videos cannot be processed by Claude Vision API
+  if (isVideo) {
+    return {
+      text: "Archivo de video detectado. La Vision AI solo puede analizar imagenes. Para analizar el contenido del video, extrae un fotograma como imagen.",
+      method: "ocr_vision" as const,
+      confidence: 0,
+    };
+  }
 
   const messages: Anthropic.MessageParam[] = [
     {

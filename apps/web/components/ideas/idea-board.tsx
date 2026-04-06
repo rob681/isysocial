@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -36,13 +36,19 @@ interface IdeaBoardProps {
   basePath: string; // "/admin/ideas", "/editor/ideas", "/cliente/ideas"
   canCreate?: boolean;
   canDrag?: boolean;
+  initialClientId?: string;
 }
 
-export function IdeaBoard({ basePath, canCreate = false, canDrag = false }: IdeaBoardProps) {
+export function IdeaBoard({ basePath, canCreate = false, canDrag = false, initialClientId }: IdeaBoardProps) {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [networkFilter, setNetworkFilter] = useState<string>("all");
-  const [clientFilter, setClientFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>(initialClientId ?? "all");
+
+  // Sync clientFilter when navigating between clients via sidebar
+  useEffect(() => {
+    setClientFilter(initialClientId ?? "all");
+  }, [initialClientId]);
   const { toast } = useToast();
 
   const { data, isLoading, refetch } = trpc.ideas.list.useQuery({
@@ -174,7 +180,7 @@ export function IdeaBoard({ basePath, canCreate = false, canDrag = false }: Idea
           </div>
 
           {canCreate && (
-            <Link href={`${basePath}/nueva`}>
+            <Link href={`${basePath}/nueva${initialClientId ? `?clientId=${initialClientId}` : ""}`}>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva idea

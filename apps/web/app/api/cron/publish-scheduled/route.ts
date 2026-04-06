@@ -19,10 +19,11 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
 
-  // Find posts ready to publish (max 10 per invocation to stay within Vercel timeout)
+  // Find posts ready to publish: SCHEDULED or APPROVED with past scheduledAt
+  // (APPROVED fallback covers posts where the auto-schedule transition was missed)
   const scheduledPosts = await db.post.findMany({
     where: {
-      status: "SCHEDULED",
+      status: { in: ["SCHEDULED", "APPROVED"] },
       scheduledAt: { lte: now },
     },
     take: 10,
@@ -52,9 +53,37 @@ export async function GET(req: NextRequest) {
 
   for (const post of scheduledPosts) {
     // Find a connected network that matches the post's network
-    const sn = post.client.socialNetworks.find(
+    // Try client-level first, then fall back to agency-level
+    let sn = post.client.socialNetworks.find(
       (n) => n.network === post.network && n.accessToken
     );
+
+    let snSource: "client" | "agency" = "client";
+
+    if (!sn) {
+      // Fallback: check agency-level accounts
+      const agencyAccount = await db.agencySocialAccount.findFirst({
+        where: {
+          agencyId: post.agencyId,
+          network: post.network,
+          isActive: true,
+          accessToken: { not: "" },
+        },
+        select: {
+          id: true,
+          network: true,
+          accountId: true,
+          accountName: true,
+          accessToken: true,
+          pageId: true,
+        },
+      });
+
+      if (agencyAccount) {
+        sn = agencyAccount as any;
+        snSource = "agency";
+      }
+    }
 
     if (!sn) {
       results.push({
@@ -86,7 +115,9 @@ export async function GET(req: NextRequest) {
     const log = await db.postPublishLog.create({
       data: {
         postId: post.id,
-        networkId: sn.id,
+        ...(snSource === "agency"
+          ? { agencyAccountId: sn.id }
+          : { networkId: sn.id }),
         network: sn.network,
         status: "PENDING",
         requestedById: agencyUser.id,

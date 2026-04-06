@@ -40,6 +40,7 @@ import {
   Trash2,
   Activity,
   FileBarChart,
+  Film,
 } from "lucide-react";
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { useTheme } from "next-themes";
@@ -68,12 +69,14 @@ const adminToolsNav: NavItem[] = [
   { label: "Equipo", href: "/admin/equipo", icon: <Users className="h-5 w-5" />, tourId: "sidebar-team" },
   { label: "Plantillas", href: "/admin/plantillas", icon: <LayoutTemplate className="h-5 w-5" /> },
   { label: "Analíticas", href: "/admin/analiticas", icon: <BarChart3 className="h-5 w-5" /> },
-  { label: "Reportes", href: "/admin/reportes", icon: <FileBarChart className="h-5 w-5" /> },
   { label: "Archivo", href: "/admin/archivo", icon: <Archive className="h-5 w-5" /> },
-  { label: "Redes Sociales", href: "/admin/redes-sociales", icon: <Share2 className="h-5 w-5" /> },
-  { label: "Grid Preview", href: "/admin/grid-preview", icon: <Grid3X3 className="h-5 w-5" /> },
-  { label: "Actividad", href: "/admin/actividad", icon: <Activity className="h-5 w-5" />, tourId: "sidebar-activity" },
   { label: "Configuración", href: "/admin/configuracion", icon: <Settings className="h-5 w-5" />, tourId: "sidebar-settings" },
+];
+
+// Sub-items for Analíticas (collapsible)
+const analyticsSubItems: NavItem[] = [
+  { label: "Reportes", href: "/admin/reportes", icon: <FileBarChart className="h-4 w-4" /> },
+  { label: "Actividad", href: "/admin/actividad", icon: <Activity className="h-4 w-4" /> },
 ];
 
 const clientSubItems: {
@@ -84,9 +87,11 @@ const clientSubItems: {
   hrefBuilder?: (prefix: string, id: string) => string;
   activeSegment?: string;
 }[] = [
+  { label: "Ideas", segment: "ideas", icon: <Lightbulb className="h-4 w-4" /> },
   { label: "Calendario", segment: "calendario", icon: <Calendar className="h-4 w-4" />, tourId: "sidebar-calendar" },
   { label: "Contenido", segment: "contenido", icon: <FileImage className="h-4 w-4" />, tourId: "sidebar-content" },
-  { label: "Ideas", segment: "ideas", icon: <Lightbulb className="h-4 w-4" /> },
+  { label: "Historias", segment: "stories", icon: <Film className="h-4 w-4" />, tourId: "sidebar-stories" },
+  { label: "Grid", segment: "grid-preview", icon: <Grid3X3 className="h-4 w-4" /> },
   { label: "Mi Marca", hrefBuilder: (prefix: string, id: string) => `${prefix}/clientes/${id}/marca`, activeSegment: "marca", icon: <Palette className="h-4 w-4" />, tourId: "sidebar-brand" },
 ];
 
@@ -380,8 +385,15 @@ function IconBar({
   const { session, avatarUrl, mainNav, toolsNav, role } = useNavConfig();
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   useEffect(() => setMounted(true), []);
   const isDark = mounted && theme === "dark";
+
+  // Auto-expand analytics sub-menu if on a sub-page
+  const isOnAnalyticsSub = pathname.startsWith("/admin/reportes") || pathname.startsWith("/admin/actividad");
+  useEffect(() => {
+    if (isOnAnalyticsSub) setAnalyticsOpen(true);
+  }, [isOnAnalyticsSub]);
 
   // Fetch agency logo
   const { data: agencyLogo } = trpc.agencies.getAgencyLogo.useQuery(undefined, {
@@ -496,9 +508,63 @@ function IconBar({
               </p>
             </div>
             <nav className="space-y-0.5 flex-shrink-0 w-full px-2">
-              {toolsNav.map((item) => (
-                <ExpandedNavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-              ))}
+              {toolsNav.map((item) => {
+                // Analíticas: render with collapsible sub-items
+                if (item.label === "Analíticas" && role === "ADMIN") {
+                  const isAnalyticsActive = isItemActive(item.href, pathname) || isOnAnalyticsSub;
+                  return (
+                    <div key={item.href}>
+                      <button
+                        onClick={() => setAnalyticsOpen((v) => !v)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 w-full",
+                          isAnalyticsActive
+                            ? "gradient-primary text-white shadow-md"
+                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                      >
+                        {item.icon}
+                        <span className="truncate flex-1 text-left">{item.label}</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", analyticsOpen ? "rotate-180" : "")} />
+                      </button>
+                      {analyticsOpen && (
+                        <div className="ml-5 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+                          <Link
+                            href={item.href}
+                            onClick={onNavigate}
+                            className={cn(
+                              "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                              isItemActive(item.href, pathname) && !isOnAnalyticsSub
+                                ? "text-primary bg-primary/10"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            )}
+                          >
+                            {item.icon}
+                            <span>Dashboard</span>
+                          </Link>
+                          {analyticsSubItems.map((sub) => (
+                            <Link
+                              key={sub.href}
+                              href={sub.href}
+                              onClick={onNavigate}
+                              className={cn(
+                                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                                isItemActive(sub.href, pathname)
+                                  ? "text-primary bg-primary/10"
+                                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                              )}
+                            >
+                              {sub.icon}
+                              <span>{sub.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return <ExpandedNavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />;
+              })}
             </nav>
           </>
         )
@@ -1615,8 +1681,11 @@ function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { session, role, avatarUrl, mainNav, toolsNav, showClientList, rolePrefix } = useNavConfig();
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [mobileAnalyticsOpen, setMobileAnalyticsOpen] = useState(false);
   useEffect(() => setMounted(true), []);
   const isDark = mounted && theme === "dark";
+  const isOnAnalyticsSub = pathname.startsWith("/admin/reportes") || pathname.startsWith("/admin/actividad");
+  useEffect(() => { if (isOnAnalyticsSub) setMobileAnalyticsOpen(true); }, [isOnAnalyticsSub]);
 
   const { data: agencyLogo } = trpc.agencies.getAgencyLogo.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
@@ -1712,9 +1781,41 @@ function MobileSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               </p>
             </div>
             <nav className="p-2 space-y-1">
-              {toolsNav.map((item) => (
-                <ExpandedNavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-              ))}
+              {toolsNav.map((item) => {
+                if (item.label === "Analíticas" && role === "ADMIN") {
+                  const isAnalyticsActive = isItemActive(item.href, pathname) || isOnAnalyticsSub;
+                  return (
+                    <div key={item.href}>
+                      <button
+                        onClick={() => setMobileAnalyticsOpen((v) => !v)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 w-full",
+                          isAnalyticsActive
+                            ? "gradient-primary text-white shadow-md"
+                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                      >
+                        {item.icon}
+                        <span className="truncate flex-1 text-left">{item.label}</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", mobileAnalyticsOpen ? "rotate-180" : "")} />
+                      </button>
+                      {mobileAnalyticsOpen && (
+                        <div className="ml-5 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+                          <Link href={item.href} onClick={onNavigate} className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors", isItemActive(item.href, pathname) && !isOnAnalyticsSub ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground")}>
+                            {item.icon}<span>Dashboard</span>
+                          </Link>
+                          {analyticsSubItems.map((sub) => (
+                            <Link key={sub.href} href={sub.href} onClick={onNavigate} className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors", isItemActive(sub.href, pathname) ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground")}>
+                              {sub.icon}<span>{sub.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return <ExpandedNavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />;
+              })}
             </nav>
           </div>
         )}

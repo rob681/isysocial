@@ -4,6 +4,7 @@ import { Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { StoryEditor } from "@/components/story-editor/story-editor";
+import { StoryEditorErrorBoundary } from "@/components/story-editor/error-boundary";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -48,13 +49,15 @@ function NewStoryContent() {
   }
 
   return (
-    <StoryEditor
-      postId={postId}
-      clientId={clientId}
-      network={network}
-      clientName={clientQuery.data?.companyName}
-      basePath="/editor/contenido"
-    />
+    <StoryEditorErrorBoundary basePath="/editor/contenido">
+      <StoryEditor
+        postId={postId}
+        clientId={clientId}
+        network={network}
+        clientName={clientQuery.data?.companyName}
+        basePath="/editor/contenido"
+      />
+    </StoryEditorErrorBoundary>
   );
 }
 

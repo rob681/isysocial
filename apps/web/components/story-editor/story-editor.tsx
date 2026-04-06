@@ -13,6 +13,7 @@ import { PropertiesPanel } from "./properties-panel";
 import { exportStoryToImage, uploadStoryImage } from "./export";
 import { loadAllFonts } from "./fonts";
 import type { StoryData } from "./types";
+import type { StoryTemplate } from "./templates";
 
 // Dynamic import for Konva canvas (SSR not supported)
 const StoryCanvas = dynamic(() => import("./canvas").then((m) => m.StoryCanvas), {
@@ -59,6 +60,7 @@ export function StoryEditor({
     reorderElement,
     undo,
     redo,
+    load,
     markClean,
   } = useStoryEditor(initialStoryData);
 
@@ -210,43 +212,53 @@ export function StoryEditor({
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
       {/* Top bar */}
-      <div className="h-14 border-b bg-card flex items-center px-4 gap-3 flex-shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => router.push(basePath)}>
+      <div className="h-14 border-b bg-card flex items-center px-3 gap-2 flex-shrink-0">
+        {/* Left: Back + Title */}
+        <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0" onClick={() => router.push(basePath)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
 
         <div className="flex-1 min-w-0">
-          <h1 className="text-sm font-semibold truncate">
-            {postTitle || "Isystory Studio"}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold truncate">
+              {postTitle || "Isystory Studio"}
+            </h1>
+            {state.isDirty && (
+              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full flex-shrink-0">Sin guardar</span>
+            )}
+          </div>
           {clientName && (
-            <p className="text-xs text-muted-foreground truncate">{clientName}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={undo} disabled={!canUndo} className="h-8 w-8">
+        {/* Center: Undo/Redo */}
+        <div className="flex items-center gap-1 mx-2">
+          <Button variant="ghost" size="icon" onClick={undo} disabled={!canUndo} className="h-8 w-8" title="Deshacer (Ctrl+Z)">
             <Undo2 className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={redo} disabled={!canRedo} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={redo} disabled={!canRedo} className="h-8 w-8" title="Rehacer (Ctrl+Shift+Z)">
             <Redo2 className="h-4 w-4" />
           </Button>
+        </div>
 
-          <div className="w-px h-6 bg-border mx-1" />
+        <div className="w-px h-7 bg-border" />
 
-          <Button variant="outline" size="sm" onClick={handleSave} disabled={saving || !postId}>
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={handleSave} disabled={saving || !postId} className="h-8 text-xs">
             {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
             Guardar
           </Button>
 
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || !postId}>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || !postId} className="h-8 text-xs">
             {exporting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
             Exportar
           </Button>
 
-          <Button size="sm" onClick={handleSendForReview} disabled={exporting || !postId}>
+          <Button size="sm" onClick={handleSendForReview} disabled={exporting || !postId} className="h-8 text-xs">
             <Send className="h-3 w-3 mr-1" />
-            Enviar a revisión
+            Enviar
           </Button>
         </div>
       </div>
@@ -256,6 +268,8 @@ export function StoryEditor({
         <ToolPanel
           onAddElement={addElement}
           onShowBackgrounds={() => setShowBackgrounds(true)}
+          onLoadTemplate={(template: StoryTemplate) => load(template.storyData)}
+          hasElements={state.storyData.elements.length > 0}
         />
 
         <StoryCanvas

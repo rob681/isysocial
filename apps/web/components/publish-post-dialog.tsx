@@ -99,10 +99,18 @@ export function PublishPostDialog({
 
   function handlePublish() {
     if (!connectedNetwork) return;
-    publishMutation.mutate({
-      postId,
-      networkIds: [connectedNetwork.id],
-    });
+    // Route to correct ID array based on source (client vs agency)
+    if (connectedNetwork.source === "agency") {
+      publishMutation.mutate({
+        postId,
+        agencyNetworkIds: [connectedNetwork.id],
+      });
+    } else {
+      publishMutation.mutate({
+        postId,
+        networkIds: [connectedNetwork.id],
+      });
+    }
   }
 
   return (

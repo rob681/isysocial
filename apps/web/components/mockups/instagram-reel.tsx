@@ -25,11 +25,14 @@ export function InstagramReelMockup({
       {/* Media / Background */}
       {firstMedia ? (
         firstMedia.type === "video" ? (
-          <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
-            <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-              <div className="w-0 h-0 border-l-[24px] border-l-white border-t-[14px] border-t-transparent border-b-[14px] border-b-transparent ml-1" />
-            </div>
-          </div>
+          <video
+            src={firstMedia.url}
+            className="absolute inset-0 w-full h-full object-cover bg-black"
+            autoPlay
+            loop={false}
+            playsInline
+            controls={true}
+          />
         ) : (
           <img src={firstMedia.url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )

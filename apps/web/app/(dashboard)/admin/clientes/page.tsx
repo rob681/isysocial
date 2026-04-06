@@ -518,6 +518,16 @@ function ClientCard({
                 <p className="text-sm text-muted-foreground truncate">{client.user.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{client.user.email}</p>
               </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(client);
+                }}
+                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                title="Editar cliente"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </div>
 
             {/* Social Networks */}

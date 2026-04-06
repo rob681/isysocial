@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,13 +80,21 @@ function getMondayOfWeek(date: Date): string {
   return d.toISOString().split("T")[0]!;
 }
 
-export default function CalendarioPage() {
+function CalendarioPageInner() {
+  const searchParams = useSearchParams();
+  const clientIdFromUrl = searchParams.get("clientId");
+
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [filterClient, setFilterClient] = useState<string>("ALL");
+  const [filterClient, setFilterClient] = useState<string>(clientIdFromUrl ?? "ALL");
   const [holidayRegions, setHolidayRegions] = useState<HolidayRegion[]>(["MX"]);
+
+  // Sync filter when navigating between clients
+  useEffect(() => {
+    setFilterClient(clientIdFromUrl ?? "ALL");
+  }, [clientIdFromUrl]);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(now));
   const [dayDate, setDayDate] = useState(() => now.toISOString().split("T")[0]!);
@@ -320,5 +329,13 @@ export default function CalendarioPage() {
       </Sheet>
       </main>
     </div>
+  );
+}
+
+export default function CalendarioPage() {
+  return (
+    <Suspense>
+      <CalendarioPageInner />
+    </Suspense>
   );
 }

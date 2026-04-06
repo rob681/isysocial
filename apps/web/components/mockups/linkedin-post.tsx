@@ -71,11 +71,13 @@ export function LinkedInPostMockup({
       {currentMedia ? (
         <div className="relative w-full aspect-video bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
           {currentMedia.type === "video" ? (
-            <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
-                <div className="w-0 h-0 border-l-[18px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1" />
-              </div>
-            </div>
+            <video
+              src={currentMedia.url}
+              className="w-full h-full object-cover bg-black"
+              controls
+              playsInline
+              preload="metadata"
+            />
           ) : (
             <img src={currentMedia.url} alt="" className="w-full h-full object-cover" />
           )}

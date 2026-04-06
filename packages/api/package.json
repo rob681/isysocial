@@ -10,14 +10,17 @@
     "@trpc/server": "10.45.2",
     "bcryptjs": "^2.4.3",
     "firebase-admin": "^13.7.0",
+    "jsonwebtoken": "^9.0.3",
     "openai": "^6.29.0",
     "pdf-parse": "^2.4.5",
     "resend": "^4.0.0",
+    "stripe": "^22.0.0",
     "superjson": "^2.2.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/pdf-parse": "^1.1.5",
     "typescript": "^5.5.0"
   }

@@ -70,11 +70,13 @@ export function XPostMockup({
           {currentMedia ? (
             <div className="relative mt-3 rounded-2xl overflow-hidden border">
               {currentMedia.type === "video" ? (
-                <div className="w-full aspect-video bg-zinc-900 flex items-center justify-center">
-                  <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
-                    <div className="w-0 h-0 border-l-[18px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1" />
-                  </div>
-                </div>
+                <video
+                  src={currentMedia.url}
+                  className="w-full aspect-video object-cover bg-black"
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
               ) : (
                 <img src={currentMedia.url} alt="" className="w-full aspect-video object-cover" />
               )}
