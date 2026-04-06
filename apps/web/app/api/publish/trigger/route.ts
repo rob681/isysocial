@@ -14,11 +14,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || !["ADMIN", "SUPER_ADMIN"].includes(session.user.role as string)) {
+  const user = session?.user as any;
+  if (!user || !["ADMIN", "SUPER_ADMIN"].includes(user.role as string)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const agencyId = (session.user as any).agencyId as string;
+  const agencyId = user.agencyId as string;
   const now = new Date();
 
   const scheduledPosts = await db.post.findMany({
