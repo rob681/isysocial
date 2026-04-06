@@ -341,6 +341,17 @@ export async function GET(
       },
     });
 
+    // ── Update client logo if not already set ────────────────────────────────
+    if (profilePic) {
+      await db.clientProfile.updateMany({
+        where: {
+          id: clientId,
+          OR: [{ logoUrl: null }, { logoUrl: "" }],
+        },
+        data: { logoUrl: profilePic },
+      });
+    }
+
     // ── Redirect back to client page ──────────────────────────────────────────
     return NextResponse.redirect(
       `${REDIRECT_BASE}/admin/clientes/${clientId}?tab=redes&connected=${networkKey}`
