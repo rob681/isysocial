@@ -49,22 +49,22 @@ const NETWORK_META: Record<
     label: "LinkedIn",
     color: "#0A66C2",
     icon: "🔵",
-    note: "Próximamente — integración en desarrollo",
-    available: false,
+    note: "Publica en tu perfil personal o página de empresa",
+    available: true,
   },
   X: {
     label: "X (Twitter)",
     color: "#000000",
     icon: "𝕏",
-    note: "Próximamente — integración en desarrollo",
+    note: "Requiere API Basic ($200/mes) — contactar admin",
     available: false,
   },
   TIKTOK: {
     label: "TikTok",
     color: "#010101",
     icon: "🎵",
-    note: "Próximamente — integración en desarrollo",
-    available: false,
+    note: "Publica videos en TikTok",
+    available: true,
   },
 };
 

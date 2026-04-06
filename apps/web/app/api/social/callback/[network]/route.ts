@@ -3,6 +3,7 @@
 // Exchanges code for token, fetches profile info, stores in DB.
 
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { db } from "@isysocial/db";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
@@ -198,18 +199,13 @@ export async function GET(
     if (networkKey === "facebook") {
       // Get user's Pages
       const pagesRes = await fetch(
-        `https://graph.facebook.com/v20.0/me/accounts?access_token=${accessToken}`
+        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,picture&access_token=${accessToken}`
       );
       const pagesData = await pagesRes.json();
-      const page = pagesData.data?.[0];
+      const pages = pagesData.data ?? [];
 
-      if (page) {
-        pageId = page.id;
-        accountId = page.id;
-        accountName = page.name;
-        pageAccessToken = page.access_token; // Use page token for publishing
-      } else {
-        // Fallback to user info
+      if (pages.length === 0) {
+        // Fallback to user info (no pages)
         const meRes = await fetch(
           `https://graph.facebook.com/v20.0/me?fields=id,name,picture&access_token=${accessToken}`
         );
@@ -217,13 +213,55 @@ export async function GET(
         accountId = meData.id;
         accountName = meData.name;
         profilePic = meData.picture?.data?.url;
+      } else if (pages.length === 1) {
+        // Single page — auto-select
+        const page = pages[0];
+        pageId = page.id;
+        accountId = page.id;
+        accountName = page.name;
+        pageAccessToken = page.access_token;
+      } else {
+        // Multiple pages — redirect to selection page
+        const cookieStore = await cookies();
+        const pagesForCookie = pages.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          accessToken: p.access_token,
+          picture: p.picture?.data?.url ?? null,
+        }));
+        cookieStore.set("pending_oauth_data", JSON.stringify({
+          accessToken,
+          clientId,
+          network: networkKey,
+          pages: pagesForCookie,
+        }), {
+          httpOnly: true,
+          secure: true,
+          maxAge: 600,
+          path: "/",
+          sameSite: "lax",
+        });
+        return NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook`
+        );
       }
     } else if (networkKey === "instagram") {
       // Get Facebook Pages first, then linked IG accounts
       const pagesRes = await fetch(
-        `https://graph.facebook.com/v20.0/me/accounts?access_token=${accessToken}`
+        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,picture&access_token=${accessToken}`
       );
       const pagesData = await pagesRes.json();
+
+      // Build array of all pages that have an IG Business Account
+      const igPages: Array<{
+        pageId: string;
+        pageName: string;
+        pageAccessToken: string;
+        pagePicture: string | null;
+        igId: string;
+        igUsername: string;
+        igProfilePic: string | null;
+      }> = [];
 
       for (const page of pagesData.data ?? []) {
         const igRes = await fetch(
@@ -233,27 +271,61 @@ export async function GET(
 
         if (igData.instagram_business_account) {
           const igId = igData.instagram_business_account.id;
-          pageId = page.id;
-          pageAccessToken = page.access_token;
-
-          // Fetch IG profile
           const profileRes = await fetch(
             `https://graph.facebook.com/v20.0/${igId}?fields=name,username,profile_picture_url&access_token=${page.access_token}`
           );
           const profileData = await profileRes.json();
 
-          accountId = igId;
-          accountName = profileData.username
-            ? `@${profileData.username}`
-            : profileData.name ?? igId;
-          profilePic = profileData.profile_picture_url;
-          break;
+          igPages.push({
+            pageId: page.id,
+            pageName: page.name,
+            pageAccessToken: page.access_token,
+            pagePicture: page.picture?.data?.url ?? null,
+            igId,
+            igUsername: profileData.username ?? profileData.name ?? igId,
+            igProfilePic: profileData.profile_picture_url ?? null,
+          });
         }
       }
 
-      if (!accountId) {
+      if (igPages.length === 0) {
         throw new Error(
           "No se encontró una cuenta de Instagram Business vinculada a tu página de Facebook."
+        );
+      } else if (igPages.length === 1) {
+        // Single IG account — auto-select
+        const ig = igPages[0];
+        pageId = ig.pageId;
+        pageAccessToken = ig.pageAccessToken;
+        accountId = ig.igId;
+        accountName = ig.igUsername.startsWith("@") ? ig.igUsername : `@${ig.igUsername}`;
+        profilePic = ig.igProfilePic ?? undefined;
+      } else {
+        // Multiple IG accounts — redirect to selection page
+        const cookieStore = await cookies();
+        const pagesForCookie = igPages.map((ig) => ({
+          id: ig.pageId,
+          name: ig.pageName,
+          accessToken: ig.pageAccessToken,
+          picture: ig.pagePicture,
+          igId: ig.igId,
+          igUsername: ig.igUsername,
+          igProfilePic: ig.igProfilePic,
+        }));
+        cookieStore.set("pending_oauth_data", JSON.stringify({
+          accessToken,
+          clientId,
+          network: networkKey,
+          pages: pagesForCookie,
+        }), {
+          httpOnly: true,
+          secure: true,
+          maxAge: 600,
+          path: "/",
+          sameSite: "lax",
+        });
+        return NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=instagram`
         );
       }
     } else if (networkKey === "linkedin") {
