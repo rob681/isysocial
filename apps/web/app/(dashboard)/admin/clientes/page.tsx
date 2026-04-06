@@ -681,10 +681,21 @@ function GroupManager() {
                 }}
                 title="Click para editar"
               >
-                <span
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: groupColor }}
-                />
+                {/* macOS-style folder icon */}
+                <span className="relative flex-shrink-0 w-4 h-[13px]">
+                  <span
+                    className="absolute top-0 left-0 w-2 h-[4px] rounded-t-[2px]"
+                    style={{ backgroundColor: groupColor, opacity: 0.85 }}
+                  />
+                  <span
+                    className="absolute bottom-0 left-0 w-full h-[10px] rounded-[2px] rounded-tl-none"
+                    style={{ background: `linear-gradient(180deg, ${groupColor}dd 0%, ${groupColor} 100%)` }}
+                  />
+                  <span
+                    className="absolute bottom-0 left-0 w-full h-[7px] rounded-[2px]"
+                    style={{ background: `linear-gradient(180deg, ${groupColor}cc 0%, ${groupColor}95 100%)`, filter: "brightness(1.2)" }}
+                  />
+                </span>
                 <span>{group.name}</span>
                 <span className="text-muted-foreground ml-0.5">
                   {group._count.clients}

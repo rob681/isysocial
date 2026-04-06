@@ -1131,12 +1131,12 @@ function ClientPanelInner({
                   </div>
                 </div>
               ) : (
-                /* ─── Normal Group Header ─── */
+                /* ─── Normal Group Header (macOS folder style) ─── */
                 <div className="group/grp flex items-center">
                   <button
                     onClick={() => toggleGroup(group.id)}
                     className={cn(
-                      "flex items-center gap-2 flex-1 rounded-md px-2.5 py-1.5 text-xs transition-colors min-w-0",
+                      "flex items-center gap-2 flex-1 rounded-md px-2 py-1.5 text-xs transition-colors min-w-0",
                       hasActiveInGroup
                         ? "text-primary font-semibold"
                         : "text-muted-foreground hover:text-accent-foreground"
@@ -1148,10 +1148,29 @@ function ClientPanelInner({
                         !isGroupCollapsed && "rotate-90"
                       )}
                     />
-                    <span
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: groupColor }}
-                    />
+                    {/* macOS-style folder icon with group color gradient */}
+                    <span className="relative flex-shrink-0 w-5 h-[17px]">
+                      {/* Back tab */}
+                      <span
+                        className="absolute top-0 left-0 w-[10px] h-[5px] rounded-t-[3px]"
+                        style={{ backgroundColor: groupColor, opacity: 0.85 }}
+                      />
+                      {/* Main body */}
+                      <span
+                        className="absolute bottom-0 left-0 w-full h-[13px] rounded-[2px] rounded-tl-none"
+                        style={{
+                          background: `linear-gradient(180deg, ${groupColor}dd 0%, ${groupColor} 100%)`,
+                        }}
+                      />
+                      {/* Front face highlight */}
+                      <span
+                        className="absolute bottom-0 left-0 w-full h-[9px] rounded-[2px]"
+                        style={{
+                          background: `linear-gradient(180deg, ${groupColor}cc 0%, ${groupColor}95 100%)`,
+                          filter: "brightness(1.2)",
+                        }}
+                      />
+                    </span>
                     <span className="font-semibold uppercase tracking-wider text-[10px] truncate">
                       {group.name}
                     </span>
@@ -1296,10 +1315,26 @@ function ClientPanelCollapsedInner({
               className="relative flex items-center justify-center w-8 h-8 rounded-lg hover:bg-accent transition-colors"
               title={`${group.name} (${count})`}
             >
-              <FolderClosed
-                className="h-5 w-5"
-                style={{ color: (group as any).color || "#6B7280" }}
-              />
+              {/* macOS-style folder icon */}
+              <span className="relative w-6 h-5">
+                <span
+                  className="absolute top-0 left-0 w-3 h-[6px] rounded-t-[3px]"
+                  style={{ backgroundColor: (group as any).color || "#6B7280", opacity: 0.85 }}
+                />
+                <span
+                  className="absolute bottom-0 left-0 w-full h-4 rounded-[3px] rounded-tl-none"
+                  style={{
+                    background: `linear-gradient(180deg, ${(group as any).color || "#6B7280"}dd 0%, ${(group as any).color || "#6B7280"} 100%)`,
+                  }}
+                />
+                <span
+                  className="absolute bottom-0 left-0 w-full h-[11px] rounded-[3px]"
+                  style={{
+                    background: `linear-gradient(180deg, ${(group as any).color || "#6B7280"}cc 0%, ${(group as any).color || "#6B7280"}95 100%)`,
+                    filter: "brightness(1.2)",
+                  }}
+                />
+              </span>
               {count > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
                   {count > 9 ? "9+" : count}
