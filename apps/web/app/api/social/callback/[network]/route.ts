@@ -3,7 +3,6 @@
 // Exchanges code for token, fetches profile info, stores in DB.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@isysocial/db";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
@@ -221,29 +220,30 @@ export async function GET(
         accountName = page.name;
         pageAccessToken = page.access_token;
       } else {
-        // Multiple pages — redirect to selection page
-        const cookieStore = await cookies();
+        // Multiple pages — set cookie on redirect response
         const pagesForCookie = pages.map((p: any) => ({
           id: p.id,
           name: p.name,
           accessToken: p.access_token,
           picture: p.picture?.data?.url ?? null,
         }));
-        cookieStore.set("pending_oauth_data", JSON.stringify({
+        const cookieValue = JSON.stringify({
           accessToken,
           clientId,
           network: networkKey,
           pages: pagesForCookie,
-        }), {
+        });
+        const redirectRes = NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook`
+        );
+        redirectRes.cookies.set("pending_oauth_data", cookieValue, {
           httpOnly: true,
           secure: true,
           maxAge: 600,
           path: "/",
           sameSite: "lax",
         });
-        return NextResponse.redirect(
-          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook`
-        );
+        return redirectRes;
       }
     } else if (networkKey === "instagram") {
       // Get Facebook Pages first, then linked IG accounts
@@ -301,8 +301,7 @@ export async function GET(
         accountName = ig.igUsername.startsWith("@") ? ig.igUsername : `@${ig.igUsername}`;
         profilePic = ig.igProfilePic ?? undefined;
       } else {
-        // Multiple IG accounts — redirect to selection page
-        const cookieStore = await cookies();
+        // Multiple IG accounts — set cookie on redirect response
         const pagesForCookie = igPages.map((ig) => ({
           id: ig.pageId,
           name: ig.pageName,
@@ -312,21 +311,23 @@ export async function GET(
           igUsername: ig.igUsername,
           igProfilePic: ig.igProfilePic,
         }));
-        cookieStore.set("pending_oauth_data", JSON.stringify({
+        const cookieValue = JSON.stringify({
           accessToken,
           clientId,
           network: networkKey,
           pages: pagesForCookie,
-        }), {
+        });
+        const redirectRes = NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=instagram`
+        );
+        redirectRes.cookies.set("pending_oauth_data", cookieValue, {
           httpOnly: true,
           secure: true,
           maxAge: 600,
           path: "/",
           sameSite: "lax",
         });
-        return NextResponse.redirect(
-          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=instagram`
-        );
+        return redirectRes;
       }
     } else if (networkKey === "linkedin") {
       const meRes = await fetch("https://api.linkedin.com/v2/me", {
