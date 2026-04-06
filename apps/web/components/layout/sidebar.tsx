@@ -75,6 +75,7 @@ const adminToolsNav: NavItem[] = [
 
 // Sub-items for Analíticas (collapsible)
 const analyticsSubItems: NavItem[] = [
+  { label: "Social", href: "/admin/analiticas/social", icon: <Share2 className="h-4 w-4" /> },
   { label: "Reportes", href: "/admin/reportes", icon: <FileBarChart className="h-4 w-4" /> },
   { label: "Actividad", href: "/admin/actividad", icon: <Activity className="h-4 w-4" /> },
 ];

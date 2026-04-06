@@ -18,18 +18,18 @@ const oauthConfig: Record<
   facebook: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,read_insights",
     clientId: process.env.META_APP_ID ?? "",
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,read_insights",
     clientId: process.env.META_APP_ID ?? "",
   },
   linkedin: {
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: "w_member_social,r_liteprofile,r_emailaddress",
+    scopes: "w_member_social,r_liteprofile,r_emailaddress,r_organization_social,w_organization_social",
     clientId: process.env.LINKEDIN_CLIENT_ID ?? "",
   },
   x: {

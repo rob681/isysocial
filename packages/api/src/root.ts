@@ -22,6 +22,7 @@ import { storiesRouter } from "./routers/stories.router";
 import { mediaVersionsRouter } from "./routers/media-versions.router";
 import { billingRouter } from "./routers/billing.router";
 import { ecosystemRouter } from "./routers/ecosystem.router";
+import { socialInsightsRouter } from "./routers/socialInsights.router";
 
 export const appRouter = router({
   auth: authRouter,
@@ -47,6 +48,7 @@ export const appRouter = router({
   mediaVersions: mediaVersionsRouter,
   billing: billingRouter,
   ecosystem: ecosystemRouter,
+  socialInsights: socialInsightsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,9 +1,9 @@
 "use client";
 
-import { LayoutGrid, List } from "lucide-react";
+import { Columns3, LayoutGrid, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ViewMode = "list" | "grid";
+export type ViewMode = "list" | "grid" | "kanban";
 
 interface ViewToggleProps {
   view: ViewMode;
@@ -36,6 +36,18 @@ export function ViewToggle({ view, onChange }: ViewToggleProps) {
       >
         <LayoutGrid className="h-3.5 w-3.5" />
         Grid
+      </button>
+      <button
+        onClick={() => onChange("kanban")}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+          view === "kanban"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Columns3 className="h-3.5 w-3.5" />
+        Kanban
       </button>
     </div>
   );

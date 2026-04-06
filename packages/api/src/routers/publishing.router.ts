@@ -42,6 +42,7 @@ export const publishingRouter = router({
           pageId: true,
           assignedAt: true,
           tokenExpiresAt: true,
+          agencyAccountId: true,
         },
       });
 
@@ -74,7 +75,13 @@ export const publishingRouter = router({
         source: "client" as const,
       }));
 
-      const agencyResults = agencyAccounts.map((n) => ({
+      // Deduplicate: exclude agency accounts already linked via ClientSocialNetwork
+      const linkedAgencyIds = new Set(
+        clientNetworks.filter((n) => n.agencyAccountId).map((n) => n.agencyAccountId!)
+      );
+      const filteredAgencyAccounts = agencyAccounts.filter((a) => !linkedAgencyIds.has(a.id));
+
+      const agencyResults = filteredAgencyAccounts.map((n) => ({
         id: n.id,
         network: n.network,
         connected: !!n.accessToken && n.isActive,

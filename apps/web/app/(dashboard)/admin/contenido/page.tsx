@@ -53,6 +53,7 @@ import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { exportToCSV } from "@/lib/export-csv";
 import { ViewToggle, type ViewMode } from "@/components/content/view-toggle";
 import { ContentGrid } from "@/components/content/content-grid";
+import { ContentKanban } from "@/components/content/content-kanban";
 import { Topbar } from "@/components/layout/topbar";
 
 /* ─── Bulk Action Bar ─────────────────────────────────────────────── */
@@ -196,7 +197,7 @@ function ContenidoPageInner() {
 
   useEffect(() => {
     const saved = localStorage.getItem("isysocial-content-view");
-    if (saved === "grid" || saved === "list") setViewMode(saved);
+    if (saved === "grid" || saved === "list" || saved === "kanban") setViewMode(saved);
   }, []);
   const handleViewChange = (v: ViewMode) => {
     setViewMode(v);
@@ -219,6 +220,20 @@ function ContenidoPageInner() {
     clientId,
     page,
     limit: 20,
+  });
+
+  // Kanban mode: fetch all posts without status filter and with higher limit
+  const { data: kanbanData, isLoading: isKanbanLoading } = trpc.posts.list.useQuery({
+    search: search || undefined,
+    network: filterNetwork !== "ALL" ? (filterNetwork as SocialNetwork) : undefined,
+    categoryId: filterCategory !== "ALL" ? filterCategory : undefined,
+    clientId,
+    page: 1,
+    limit: 200,
+  }, { enabled: viewMode === "kanban" });
+
+  const updateStatusMutation = trpc.posts.updateStatus.useMutation({
+    onSuccess: () => { utils.posts.list.invalidate(); },
   });
 
   const bulkStatusMutation = trpc.posts.bulkUpdateStatus.useMutation({
@@ -406,12 +421,21 @@ function ContenidoPageInner() {
       </div>
 
       {/* Post list */}
-      {isLoading ? (
+      {(viewMode === "kanban" ? isKanbanLoading : isLoading) ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
           ))}
         </div>
+      ) : viewMode === "kanban" ? (
+        <ContentKanban
+          posts={(kanbanData?.posts ?? []) as any}
+          basePath="/admin/contenido"
+          showClient
+          onStatusChange={(postId, newStatus) => {
+            updateStatusMutation.mutate({ id: postId, toStatus: newStatus as any });
+          }}
+        />
       ) : !data || data.posts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
