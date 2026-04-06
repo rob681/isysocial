@@ -22,26 +22,26 @@ function getTokenConfig(network: NetworkKey): TokenConfig {
     case "instagram":
       return {
         tokenUrl: "https://graph.facebook.com/v20.0/oauth/access_token",
-        clientId: process.env.META_APP_ID ?? "",
-        clientSecret: process.env.META_APP_SECRET ?? "",
+        clientId: (process.env.META_APP_ID ?? "").trim(),
+        clientSecret: (process.env.META_APP_SECRET ?? "").trim(),
       };
     case "linkedin":
       return {
         tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
-        clientId: process.env.LINKEDIN_CLIENT_ID ?? "",
-        clientSecret: process.env.LINKEDIN_CLIENT_SECRET ?? "",
+        clientId: (process.env.LINKEDIN_CLIENT_ID ?? "").trim(),
+        clientSecret: (process.env.LINKEDIN_CLIENT_SECRET ?? "").trim(),
       };
     case "x":
       return {
         tokenUrl: "https://api.twitter.com/2/oauth2/token",
-        clientId: process.env.X_CLIENT_ID ?? "",
-        clientSecret: process.env.X_CLIENT_SECRET ?? "",
+        clientId: (process.env.X_CLIENT_ID ?? "").trim(),
+        clientSecret: (process.env.X_CLIENT_SECRET ?? "").trim(),
       };
     case "tiktok":
       return {
         tokenUrl: "https://open.tiktokapis.com/v2/oauth/token/",
-        clientId: process.env.TIKTOK_CLIENT_KEY ?? "",
-        clientSecret: process.env.TIKTOK_CLIENT_SECRET ?? "",
+        clientId: (process.env.TIKTOK_CLIENT_KEY ?? "").trim(),
+        clientSecret: (process.env.TIKTOK_CLIENT_SECRET ?? "").trim(),
       };
   }
 }
