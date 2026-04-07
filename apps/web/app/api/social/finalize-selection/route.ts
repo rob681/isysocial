@@ -7,6 +7,7 @@ import { db } from "@isysocial/db";
 const networkEnumMap: Record<string, string> = {
   facebook: "FACEBOOK",
   instagram: "INSTAGRAM",
+  linkedin: "LINKEDIN",
 };
 
 export async function POST(req: NextRequest) {
@@ -78,9 +79,22 @@ export async function POST(req: NextRequest) {
         ? selectedPage.igUsername
         : `@${selectedPage.igUsername}`;
       profilePic = selectedPage.igProfilePic ?? null;
+    } else if (network === "linkedin") {
+      // selectedPage.accountId = "urn:li:person:xxx" or "urn:li:organization:xxx"
+      accountId = selectedPage.accountId ?? (
+        selectedPage.type === "org"
+          ? `urn:li:organization:${selectedPage.id}`
+          : `urn:li:person:${selectedPage.id}`
+      );
+      accountName = selectedPage.name;
+      profilePic = selectedPage.picture ?? null;
     }
 
-    const pageIdForNetwork = selectedPage.id;
+    // For LinkedIn personal profile, use "LINKEDIN" as pageId (matches single-account flow)
+    const pageIdForNetwork =
+      network === "linkedin" && selectedPage.type === "person"
+        ? "LINKEDIN"
+        : selectedPage.id;
 
     await db.clientSocialNetwork.upsert({
       where: {

@@ -43,6 +43,8 @@ import {
   Folder,
   Trash2,
   X,
+  Mail,
+  Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -482,6 +484,17 @@ function ClientCard({
   onEdit: (client: any) => void;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
+  const hasPassword = !!client.user?.passwordHash;
+
+  const inviteMutation = trpc.clients.invite.useMutation({
+    onSuccess: () => toast({
+      title: "Invitación enviada",
+      description: `Se envió el email de invitación a ${client.user.email}`,
+    }),
+    onError: (err) => toast({ title: "Error al enviar", description: err.message, variant: "destructive" }),
+  });
+
   const initials = client.companyName
     .split(" ")
     .map((w: string) => w[0])
@@ -513,21 +526,45 @@ function ClientCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="font-semibold truncate">{client.companyName}</h3>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold truncate">{client.companyName}</h3>
+                  {!hasPassword && (
+                    <span className="flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                      <Clock className="h-2.5 w-2.5" />
+                      Pendiente
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground truncate">{client.user.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{client.user.email}</p>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(client);
-                }}
-                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                title="Editar cliente"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Invite / resend button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    inviteMutation.mutate({ clientId: client.id });
+                  }}
+                  disabled={inviteMutation.isPending}
+                  className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title={hasPassword ? "Reenviar acceso" : "Enviar invitación"}
+                >
+                  {inviteMutation.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Mail className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(client);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title="Editar cliente"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Social Networks */}

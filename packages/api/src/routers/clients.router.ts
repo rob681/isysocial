@@ -39,7 +39,7 @@ export const clientsRouter = router({
           take: input.limit,
           orderBy: { createdAt: "desc" },
           include: {
-            user: { select: { id: true, name: true, email: true, avatarUrl: true, isActive: true } },
+            user: { select: { id: true, name: true, email: true, avatarUrl: true, isActive: true, passwordHash: true } },
             socialNetworks: { where: { isActive: true }, orderBy: { network: "asc" } },
             group: { select: { id: true, name: true } },
             _count: { select: { posts: true, ideas: true } },

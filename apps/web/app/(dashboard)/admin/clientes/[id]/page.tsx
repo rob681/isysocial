@@ -18,8 +18,16 @@ import {
   Unlink,
   Globe,
   User,
+  Users,
   LayoutGrid,
   Share2,
+  UserPlus,
+  Mail,
+  MoreVertical,
+  ShieldCheck,
+  Eye,
+  Trash2,
+  Send,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Topbar } from "@/components/layout/topbar";
@@ -80,6 +88,13 @@ export default function ClientDetailPage() {
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "info");
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
+  // ── Contact invite form state ─────────────────────────────────────────────
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    name: "", email: "", phone: "", role: "REVIEWER" as "APPROVER" | "REVIEWER" | "OBSERVER",
+  });
+  const [openContactMenu, setOpenContactMenu] = useState<string | null>(null);
+
   // Show connection success/error toasts from OAuth redirect
   useEffect(() => {
     const connected = searchParams.get("connected");
@@ -104,6 +119,14 @@ export default function ClientDetailPage() {
     trpc.clients.get.useQuery({ id: clientId });
   const client = clientData as any;
 
+  const inviteClientMutation = trpc.clients.invite.useMutation({
+    onSuccess: () => toast({
+      title: "Invitación enviada",
+      description: `Se envió el email de invitación a ${client?.user?.email}`,
+    }),
+    onError: (err) => toast({ title: "Error al enviar", description: err.message, variant: "destructive" }),
+  });
+
   const {
     data: networkStatus,
     isLoading: networksLoading,
@@ -112,6 +135,49 @@ export default function ClientDetailPage() {
     { clientId },
     { enabled: activeTab === "redes", staleTime: 30_000 }
   );
+
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  const {
+    data: contactsData,
+    isLoading: contactsLoading,
+    refetch: refetchContacts,
+  } = trpc.clientContacts.list.useQuery(
+    { clientId },
+    { enabled: activeTab === "contactos" }
+  );
+
+  const inviteContactMutation = trpc.clientContacts.invite.useMutation({
+    onSuccess: () => {
+      toast({ title: "Invitación enviada", description: "El contacto recibirá un email para crear su contraseña." });
+      setShowInviteForm(false);
+      setInviteForm({ name: "", email: "", phone: "", role: "REVIEWER" });
+      refetchContacts();
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const updateRoleMutation = trpc.clientContacts.updateRole.useMutation({
+    onSuccess: () => { toast({ title: "Rol actualizado" }); refetchContacts(); setOpenContactMenu(null); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const setActiveMutation = trpc.clientContacts.setActive.useMutation({
+    onSuccess: (_, vars) => {
+      toast({ title: vars.isActive ? "Contacto activado" : "Contacto desactivado" });
+      refetchContacts(); setOpenContactMenu(null);
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const resendInviteMutation = trpc.clientContacts.resendInvite.useMutation({
+    onSuccess: () => { toast({ title: "Invitación reenviada" }); setOpenContactMenu(null); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const removeContactMutation = trpc.clientContacts.remove.useMutation({
+    onSuccess: () => { toast({ title: "Contacto eliminado" }); refetchContacts(); setOpenContactMenu(null); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
   // ── Disconnect handler ────────────────────────────────────────────────────
   async function handleDisconnect(network: string) {
@@ -214,6 +280,10 @@ export default function ClientDetailPage() {
             <User className="h-4 w-4 mr-2" />
             Información
           </TabsTrigger>
+          <TabsTrigger value="contactos">
+            <Users className="h-4 w-4 mr-2" />
+            Contactos
+          </TabsTrigger>
           <TabsTrigger value="redes">
             <Share2 className="h-4 w-4 mr-2" />
             Redes Sociales
@@ -278,8 +348,268 @@ export default function ClientDetailPage() {
                 <span>·</span>
                 <span>{(client as any)._count?.ideas ?? 0} ideas</span>
               </div>
+
+              {/* Invite / access section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">Acceso del cliente</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {client?.user?.passwordHash
+                        ? "El cliente ya configuró su contraseña y puede iniciar sesión."
+                        : "El cliente aún no ha aceptado la invitación ni creado su contraseña."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {!client?.user?.passwordHash && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50 gap-1">
+                        <Mail className="h-3 w-3" />
+                        Pendiente
+                      </Badge>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={inviteClientMutation.isPending}
+                      onClick={() => inviteClientMutation.mutate({ clientId })}
+                    >
+                      {inviteClientMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                      ) : (
+                        <Mail className="h-3.5 w-3.5 mr-2" />
+                      )}
+                      {client?.user?.passwordHash ? "Reenviar acceso" : "Enviar invitación"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Contactos Tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="contactos" className="space-y-4">
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold">Contactos del cliente</h3>
+              <p className="text-sm text-muted-foreground">
+                Personas adicionales que pueden revisar y aprobar contenido de esta cuenta.
+              </p>
+            </div>
+            <Button size="sm" className="gradient-primary text-white" onClick={() => setShowInviteForm(!showInviteForm)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Invitar contacto
+            </Button>
+          </div>
+
+          {/* Invite form */}
+          {showInviteForm && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="pt-5 space-y-4">
+                <p className="text-sm font-medium">Nuevo contacto</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Nombre *</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="Nombre completo"
+                      value={inviteForm.name}
+                      onChange={(e) => setInviteForm((p) => ({ ...p, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Email *</label>
+                    <input
+                      type="email"
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="email@empresa.com"
+                      value={inviteForm.email}
+                      onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Teléfono (opcional)</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="+52 55 1234 5678"
+                      value={inviteForm.phone}
+                      onChange={(e) => setInviteForm((p) => ({ ...p, phone: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Rol</label>
+                    <select
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={inviteForm.role}
+                      onChange={(e) => setInviteForm((p) => ({ ...p, role: e.target.value as any }))}
+                    >
+                      <option value="APPROVER">Aprobador — puede aprobar / rechazar posts</option>
+                      <option value="REVIEWER">Revisor — puede ver y comentar</option>
+                      <option value="OBSERVER">Observador — solo lectura</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setShowInviteForm(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gradient-primary text-white"
+                    disabled={!inviteForm.name || !inviteForm.email || inviteContactMutation.isPending}
+                    onClick={() => inviteContactMutation.mutate({ clientId, ...inviteForm })}
+                  >
+                    {inviteContactMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Enviar invitación
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Primary user */}
+          {contactsData && (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contacto principal</p>
+              <Card>
+                <CardContent className="py-4 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
+                    {(contactsData.primaryUser?.name ?? "?")[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{contactsData.primaryUser?.name ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{contactsData.primaryUser?.email ?? "—"}</p>
+                  </div>
+                  <Badge variant="secondary" className="flex-shrink-0 text-xs">
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    Principal
+                  </Badge>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Additional contacts */}
+          {contactsLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : (contactsData?.contacts?.length ?? 0) > 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Contactos adicionales ({contactsData!.contacts.length})
+              </p>
+              {contactsData!.contacts.map((contact: any) => {
+                const roleConfig = {
+                  APPROVER: { label: "Aprobador", icon: ShieldCheck, color: "bg-green-100 text-green-700 border-green-200" },
+                  REVIEWER: { label: "Revisor", icon: Eye, color: "bg-blue-100 text-blue-700 border-blue-200" },
+                  OBSERVER: { label: "Observador", icon: Eye, color: "bg-gray-100 text-gray-700 border-gray-200" },
+                }[contact.role as string] ?? { label: contact.role, icon: User, color: "bg-gray-100 text-gray-700 border-gray-200" };
+                const RoleIcon = roleConfig.icon;
+                const hasPassword = !!contact.user?.passwordHash;
+
+                return (
+                  <Card key={contact.id} className={!contact.isActive ? "opacity-60" : ""}>
+                    <CardContent className="py-4 flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-semibold text-sm flex-shrink-0">
+                        {(contact.user?.name ?? "?")[0]?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium truncate">{contact.user?.name}</p>
+                          {!contact.isActive && (
+                            <Badge variant="outline" className="text-[10px] py-0 text-muted-foreground">Inactivo</Badge>
+                          )}
+                          {!hasPassword && (
+                            <Badge variant="outline" className="text-[10px] py-0 text-amber-600 border-amber-300 bg-amber-50">
+                              Pendiente
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">{contact.user?.email}</p>
+                      </div>
+                      <Badge variant="outline" className={`flex-shrink-0 text-xs gap-1 ${roleConfig.color}`}>
+                        <RoleIcon className="h-3 w-3" />
+                        {roleConfig.label}
+                      </Badge>
+
+                      {/* Menu */}
+                      <div className="relative flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setOpenContactMenu(openContactMenu === contact.id ? null : contact.id)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                        {openContactMenu === contact.id && (
+                          <div className="absolute right-0 top-9 z-50 w-52 rounded-md border bg-popover shadow-md text-sm">
+                            {/* Change role */}
+                            <div className="px-3 py-2 text-xs text-muted-foreground font-medium border-b">Cambiar rol</div>
+                            {(["APPROVER", "REVIEWER", "OBSERVER"] as const).map((r) => (
+                              <button
+                                key={r}
+                                className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 ${contact.role === r ? "font-medium text-primary" : ""}`}
+                                onClick={() => updateRoleMutation.mutate({ contactId: contact.id, role: r })}
+                              >
+                                {contact.role === r && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+                                {contact.role !== r && <span className="w-3.5" />}
+                                {{ APPROVER: "Aprobador", REVIEWER: "Revisor", OBSERVER: "Observador" }[r]}
+                              </button>
+                            ))}
+                            <div className="border-t my-1" />
+                            {/* Resend invite */}
+                            {!hasPassword && (
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+                                onClick={() => resendInviteMutation.mutate({ contactId: contact.id })}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                                Reenviar invitación
+                              </button>
+                            )}
+                            {/* Toggle active */}
+                            <button
+                              className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+                              onClick={() => setActiveMutation.mutate({ contactId: contact.id, isActive: !contact.isActive })}
+                            >
+                              {contact.isActive ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                              {contact.isActive ? "Desactivar" : "Activar"}
+                            </button>
+                            {/* Remove */}
+                            <button
+                              className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 text-destructive"
+                              onClick={() => {
+                                if (confirm(`¿Eliminar a ${contact.user?.name}? Esta acción no se puede deshacer.`)) {
+                                  removeContactMutation.mutate({ contactId: contact.id });
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Eliminar contacto
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : contactsData && (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p>No hay contactos adicionales.</p>
+              <p className="text-xs mt-1">Invita a más personas del cliente para que revisen el contenido.</p>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Redes Sociales Tab ────────────────────────────────────────────── */}

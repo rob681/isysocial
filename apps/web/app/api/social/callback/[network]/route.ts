@@ -314,31 +314,88 @@ export async function GET(
         );
       }
     } else if (networkKey === "linkedin") {
-      const meRes = await fetch("https://api.linkedin.com/v2/me", {
+      // OpenID Connect userinfo endpoint
+      const meRes = await fetch("https://api.linkedin.com/v2/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const meData = await meRes.json();
-      accountId = `urn:li:person:${meData.id}`;
-      accountName = [meData.localizedFirstName, meData.localizedLastName]
-        .filter(Boolean)
-        .join(" ");
+      const personSub = meData.sub ?? "";
+      const personName = meData.name ?? [meData.given_name, meData.family_name].filter(Boolean).join(" ") ?? personSub;
+      const personPic: string | undefined = meData.picture ?? undefined;
 
-      // Profile picture (best-effort)
+      // Try to fetch organization pages (requires r_organization_social scope)
+      let orgPages: Array<{
+        id: string;
+        name: string;
+        picture: string | null;
+        type: "person" | "org";
+        accountId: string;
+      }> = [];
+
       try {
-        const picRes = await fetch(
-          "https://api.linkedin.com/v2/me?projection=(id,profilePicture(displayImage~:playableStreams))",
+        const orgsRes = await fetch(
+          "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        const picData = await picRes.json();
-        const elements =
-          picData?.profilePicture?.["displayImage~"]?.elements;
-        if (elements?.length) {
-          profilePic =
-            elements[elements.length - 1]?.identifiers?.[0]?.identifier;
+        const orgsData = await orgsRes.json();
+        const orgElements: Array<{ organization: string }> = orgsData.elements ?? [];
+
+        for (const el of orgElements) {
+          const orgUrn = el.organization ?? "";
+          const orgId = orgUrn.split(":").pop() ?? "";
+          if (!orgId) continue;
+          try {
+            const orgRes = await fetch(
+              `https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~:playableStreams))`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const orgInfo = await orgRes.json();
+            const logoElements = orgInfo?.logoV2?.["original~"]?.elements;
+            const logoUrl: string | null =
+              logoElements?.[logoElements.length - 1]?.identifiers?.[0]?.identifier ?? null;
+            orgPages.push({
+              id: orgId,
+              name: orgInfo.localizedName ?? `Organización ${orgId}`,
+              picture: logoUrl,
+              type: "org",
+              accountId: `urn:li:organization:${orgId}`,
+            });
+          } catch {
+            // skip org if details fetch fails
+          }
         }
       } catch {
-        // ignore
+        // scope not granted or API unavailable — continue with personal only
       }
+
+      if (orgPages.length > 0) {
+        // Build options list: personal profile first, then orgs
+        const allOptions = [
+          {
+            id: personSub,
+            name: personName,
+            picture: personPic ?? null,
+            type: "person" as const,
+            accountId: `urn:li:person:${personSub}`,
+          },
+          ...orgPages,
+        ];
+        // Redirect to page selection UI
+        const selectionToken = crypto.randomUUID();
+        await db.systemConfig.upsert({
+          where: { key: `pending_oauth_${selectionToken}` },
+          update: { value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: allOptions, expiresAt: Date.now() + 600000 }) },
+          create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: allOptions, expiresAt: Date.now() + 600000 }) },
+        });
+        return NextResponse.redirect(
+          `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=linkedin&token=${selectionToken}`
+        );
+      }
+
+      // No org pages found — connect personal profile only
+      accountId = personSub ? `urn:li:person:${personSub}` : "";
+      accountName = personName;
+      profilePic = personPic;
     } else if (networkKey === "x") {
       const meRes = await fetch("https://api.twitter.com/2/users/me", {
         headers: { Authorization: `Bearer ${accessToken}` },

@@ -97,6 +97,14 @@ enum PublishStatus {
   @@schema("isysocial")
 }
 
+enum ContactRole {
+  APPROVER   // Puede aprobar / rechazar posts
+  REVIEWER   // Puede ver y comentar, pero no aprobar
+  OBSERVER   // Solo lectura
+
+  @@schema("isysocial")
+}
+
 // ─── AGENCY (multi-tenant) ────────────────────────────────────────────────────
 
 model Agency {
@@ -203,6 +211,7 @@ model User {
   updatedAt           DateTime @updatedAt
 
   clientProfile   ClientProfile?
+  clientContact   ClientContact?
   editorProfile   EditorProfile?
   notifications   Notification[]
   tokens          Token[]
@@ -242,10 +251,32 @@ model ClientProfile {
   brandAssets            ClientBrandAsset[]
   guidedReviewSessions   GuidedReviewSession[]
   brandBrochureSessions  BrandBrochureSession[]
+  contacts               ClientContact[]
 
   @@index([agencyId])
   @@index([groupId])
   @@map("iso_client_profiles")
+  @@schema("isysocial")
+}
+
+// ─── CLIENT CONTACTS (múltiples revisores por cliente) ────────────────────────
+
+model ClientContact {
+  id              String        @id @default(cuid())
+  clientProfileId String
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  // Cada contacto tiene su propio User para login independiente
+  userId          String        @unique
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role            ContactRole   @default(REVIEWER)
+  isActive        Boolean       @default(true)
+  invitedAt       DateTime      @default(now())
+  lastLoginAt     DateTime?
+
+  @@index([clientProfileId])
+  @@map("iso_client_contacts")
   @@schema("isysocial")
 }
 

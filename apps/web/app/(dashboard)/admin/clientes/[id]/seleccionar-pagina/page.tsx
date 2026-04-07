@@ -16,6 +16,7 @@ interface PendingPage {
   igId: string | null;
   igUsername: string | null;
   igProfilePic: string | null;
+  type?: string | null; // "person" | "org" for LinkedIn
 }
 
 export default function SeleccionarPaginaPage() {
@@ -32,7 +33,8 @@ export default function SeleccionarPaginaPage() {
   const [selecting, setSelecting] = useState<string | null>(null);
 
   const isInstagram = network === "instagram";
-  const networkLabel = isInstagram ? "Instagram" : "Facebook";
+  const isLinkedIn = network === "linkedin";
+  const networkLabel = isInstagram ? "Instagram" : isLinkedIn ? "LinkedIn" : "Facebook";
 
   useEffect(() => {
     async function fetchPages() {
@@ -98,6 +100,8 @@ export default function SeleccionarPaginaPage() {
               <p className="text-sm text-muted-foreground">
                 {isInstagram
                   ? "Tu cuenta de Facebook tiene varias páginas con Instagram Business. Elige cuál conectar."
+                  : isLinkedIn
+                  ? "Tu cuenta de LinkedIn tiene páginas de empresa. Elige cuál conectar a este cliente."
                   : "Tu cuenta de Facebook tiene varias páginas. Elige cuál conectar a este cliente."}
               </p>
             </div>
@@ -156,6 +160,10 @@ export default function SeleccionarPaginaPage() {
                   : page.name;
                 const subtitle = isInstagram
                   ? `Página: ${page.name}`
+                  : isLinkedIn
+                  ? page.type === "org"
+                    ? "Página de empresa"
+                    : "Perfil personal"
                   : `ID: ${page.id}`;
 
                 return (
@@ -177,7 +185,7 @@ export default function SeleccionarPaginaPage() {
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <span className="text-lg">
-                            {isInstagram ? "📸" : "🟦"}
+                            {isInstagram ? "📸" : isLinkedIn ? (page.type === "org" ? "🏢" : "👤") : "🟦"}
                           </span>
                         </div>
                       )}

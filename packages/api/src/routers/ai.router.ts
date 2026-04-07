@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure, getAgencyId } from "../trpc";
-import { generateSocialCopy, generateBrandText } from "../lib/openai";
+import { generateSocialCopy, generateBrandText } from "../lib/haiku";
 import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Centralized Brand Context Builder ────────────────────────────────────
@@ -436,7 +436,7 @@ REGLAS ESTRICTAS:
 
       const anthropic = new Anthropic();
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 500,
         system: `Eres experto en copywriting social media. Tu tarea es refinar copy genérico transformándolo en anécdotas o preguntas provocativas que mantengan autenticidad.
 ${brandContext ? `\nCONTEXTO DE MARCA (respeta tono y valores):\n${brandContext}` : ""}
@@ -491,7 +491,7 @@ REGLAS:
 
       const anthropic = new Anthropic();
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 600,
         system: `Eres SEO copywriter para ${input.network}. Tu tarea es enriquecer copy insertando keywords de forma orgánica.
 

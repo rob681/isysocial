@@ -27,12 +27,18 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
           include: {
             clientProfile: { select: { id: true } },
+            clientContact: { select: { id: true, clientProfileId: true, isActive: true } },
             editorProfile: { select: { id: true, permissions: true } },
           },
         });
 
         if (!user || !user.isActive) {
           throw new Error("Credenciales inválidas");
+        }
+
+        // Si es un ClientContact, verificar que el contacto esté activo
+        if (user.clientContact && !user.clientContact.isActive) {
+          throw new Error("Tu acceso ha sido desactivado. Contacta al administrador.");
         }
 
         // Verify agency is active
@@ -60,6 +66,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Credenciales inválidas");
         }
 
+        // ClientContacts no tienen clientProfile propio — usan el del cliente al que están vinculados
+        const clientProfileId =
+          user.clientProfile?.id ?? user.clientContact?.clientProfileId;
+
         return {
           id: user.id,
           email: user.email,
@@ -67,7 +77,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           avatarUrl: user.avatarUrl,
           agencyId: user.agencyId ?? undefined,
-          clientProfileId: user.clientProfile?.id,
+          clientProfileId,
           editorProfileId: user.editorProfile?.id,
           permissions: (user.editorProfile?.permissions as string[]) ?? [],
           onboardingCompleted: user.onboardingCompleted,

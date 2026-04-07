@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       igId: p.igId ?? null,
       igUsername: p.igUsername ?? null,
       igProfilePic: p.igProfilePic ?? null,
+      type: p.type ?? null, // "person" | "org" for LinkedIn
     }));
 
     return NextResponse.json({

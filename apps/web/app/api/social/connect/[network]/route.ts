@@ -29,7 +29,7 @@ const oauthConfig: Record<
   },
   linkedin: {
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: "w_member_social,r_liteprofile,r_emailaddress,r_organization_social,w_organization_social",
+    scopes: "openid profile email w_member_social r_organization_social w_organization_social",
     clientId: (process.env.LINKEDIN_CLIENT_ID ?? "").trim(),
   },
   x: {

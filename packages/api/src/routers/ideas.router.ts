@@ -171,8 +171,23 @@ export const ideasRouter = router({
         }
       }
 
-      // Filters
-      if (input.clientId) where.clientId = input.clientId;
+      // Filters — apply clientId only if it doesn't violate role-based restrictions
+      if (input.clientId) {
+        if (user.role === "CLIENTE") {
+          // CLIENTE is already locked to their own clientProfileId — ignore input
+        } else if (user.role === "EDITOR" && where.OR) {
+          // Editor has an OR clause (assigned clients + null) — wrap with AND to combine
+          const existingOr = where.OR;
+          delete where.OR;
+          where.AND = [
+            { OR: existingOr },
+            { clientId: input.clientId },
+          ];
+        } else {
+          // ADMIN or EDITOR with MANAGE_ALL_CLIENTS — apply freely
+          where.clientId = input.clientId;
+        }
+      }
       if (input.status) where.status = input.status;
       if (input.network) {
         where.OR = [

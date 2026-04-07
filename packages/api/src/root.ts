@@ -23,6 +23,7 @@ import { mediaVersionsRouter } from "./routers/media-versions.router";
 import { billingRouter } from "./routers/billing.router";
 import { ecosystemRouter } from "./routers/ecosystem.router";
 import { socialInsightsRouter } from "./routers/socialInsights.router";
+import { clientContactsRouter } from "./routers/clientContacts.router";
 
 export const appRouter = router({
   auth: authRouter,
@@ -31,6 +32,7 @@ export const appRouter = router({
   brandBrochure: brandBrochureRouter,
   videoComments: videoCommentsRouter,
   clients: clientsRouter,
+  clientContacts: clientContactsRouter,
   clientGroups: clientGroupsRouter,
   publishing: publishingRouter,
   editors: editorsRouter,

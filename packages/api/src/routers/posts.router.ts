@@ -178,8 +178,21 @@ export const postsRouter = router({
         }
       }
 
-      // Filters
-      if (input.clientId) where.clientId = input.clientId;
+      // Filters — apply clientId only if it doesn't violate role-based restrictions
+      if (input.clientId) {
+        if (user.role === "CLIENTE") {
+          // CLIENTE is already locked to their own clientProfileId — ignore input
+        } else if (user.role === "EDITOR" && where.clientId?.in) {
+          // Only apply if the requested client is within their assigned set
+          const allowed = where.clientId.in as string[];
+          if (allowed.includes(input.clientId)) {
+            where.clientId = input.clientId;
+          }
+        } else {
+          // ADMIN or EDITOR with MANAGE_ALL_CLIENTS — apply freely
+          where.clientId = input.clientId;
+        }
+      }
       if (input.network) where.network = input.network;
       if (input.status) {
         // If client already has a "not DRAFT" filter, combine with requested status
