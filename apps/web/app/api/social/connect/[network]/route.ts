@@ -17,14 +17,18 @@ const oauthConfig: Record<
 > = {
   facebook: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
+    // All scopes below are approved "Listo para la prueba" in Meta App Review
+    // instagram_business_manage_insights: Instagram analytics (new API)
+    // pages_read_engagement: Facebook page analytics + engagement
+    // pages_read_user_content: read page content posted by users
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_business_manage_insights,pages_read_user_content",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_business_manage_insights,pages_read_user_content",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   linkedin: {
