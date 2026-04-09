@@ -304,6 +304,75 @@ export const socialInsightsRouter = router({
     }),
 
   /**
+   * Get the full media list for an Instagram account (all historical posts)
+   * with their insights. Uses /media endpoint to pull posts not created via Isysocial.
+   */
+  getIGMediaList: protectedProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        limit: z.number().min(1).max(50).default(20),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const client = await ctx.db.clientProfile.findFirst({
+        where: { id: input.clientId, agencyId },
+        select: { id: true, companyName: true },
+      });
+      if (!client) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
+
+      const creds = await resolveNetworkCredentials(ctx.db, input.clientId, "INSTAGRAM", agencyId);
+      if (!creds) throw new TRPCError({ code: "BAD_REQUEST", message: "No hay cuenta de Instagram conectada." });
+
+      // Fetch media list from IG API
+      const url = `https://graph.facebook.com/v20.0/${creds.accountId}/media?fields=id,timestamp,media_type,like_count,comments_count,permalink,caption,thumbnail_url,media_url&limit=${input.limit}&access_token=${creds.accessToken}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = await res.text();
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Error de API: ${body}` });
+      }
+      const json = await res.json() as { data: any[] };
+      const media = json.data ?? [];
+
+      // Fetch insights for each media item in parallel (batch of 10 max)
+      const withInsights = await Promise.all(
+        media.slice(0, input.limit).map(async (item: any) => {
+          const insightsUrl = `https://graph.facebook.com/v20.0/${item.id}/insights?metric=impressions,reach,saved,shares${item.media_type === "VIDEO" ? ",plays" : ""}&access_token=${creds.accessToken}`;
+          const insRes = await fetch(insightsUrl).catch(() => null);
+          let insights: Record<string, number> = {};
+          if (insRes?.ok) {
+            const insJson = await insRes.json() as { data: any[] };
+            for (const entry of insJson.data ?? []) {
+              insights[entry.name] = entry.values?.[0]?.value ?? 0;
+            }
+          }
+          return {
+            id: item.id,
+            timestamp: item.timestamp,
+            mediaType: item.media_type,
+            permalink: item.permalink,
+            caption: item.caption?.slice(0, 120) ?? null,
+            thumbnailUrl: item.thumbnail_url ?? item.media_url ?? null,
+            likes: item.like_count ?? 0,
+            comments: item.comments_count ?? 0,
+            impressions: insights["impressions"] ?? 0,
+            reach: insights["reach"] ?? 0,
+            saved: insights["saved"] ?? 0,
+            shares: insights["shares"] ?? 0,
+            plays: insights["plays"] ?? 0,
+          };
+        })
+      );
+
+      // Sort by reach desc
+      withInsights.sort((a, b) => b.reach - a.reach);
+
+      return { media: withInsights, total: media.length };
+    }),
+
+  /**
    * Get a client overview with insights aggregated across all connected networks.
    */
   getClientOverview: protectedProcedure
