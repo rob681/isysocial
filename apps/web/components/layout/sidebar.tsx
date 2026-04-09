@@ -116,6 +116,7 @@ const clienteNav: NavItem[] = [
   { label: "Archivo", href: "/cliente/archivo", icon: <Archive className="h-5 w-5" /> },
   { label: "Mi Marca", href: "/cliente/marca", icon: <Palette className="h-5 w-5" />, tourId: "sidebar-brand" },
   { label: "Brochure Guiado", href: "/cliente/marca-guiada", icon: <Wand2 className="h-5 w-5" /> },
+  { label: "Estadísticas", href: "/cliente/estadisticas", icon: <BarChart3 className="h-5 w-5" /> },
 ];
 
 // ─── SuperAdmin / Soporte / Facturación Navigation ────────────────────────

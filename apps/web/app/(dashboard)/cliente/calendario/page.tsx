@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ChevronLeft, ChevronRight, Calendar, FileImage, CalendarDays, CalendarRange, CalendarClock } from "lucide-react";
-import { NETWORK_LABELS, NETWORK_COLORS, POST_STATUS_LABELS, POST_STATUS_COLORS, getHolidaysForMonth, HOLIDAY_REGION_LABELS } from "@isysocial/shared";
+import { NETWORK_LABELS, NETWORK_COLORS, POST_STATUS_LABELS, POST_STATUS_COLORS, getHolidaysForMonth, getMiscDaysForMonth, HOLIDAY_REGION_LABELS } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, HolidayRegion } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
@@ -57,6 +57,7 @@ export default function ClienteCalendarioPage() {
 
   const calendarDays = useMemo(() => getCalendarDays(year, month), [year, month]);
   const holidays = useMemo(() => getHolidaysForMonth(year, month, holidayRegions), [year, month, holidayRegions]);
+  const miscDays = useMemo(() => getMiscDaysForMonth(year, month), [year, month]);
   const today = now.toISOString().split("T")[0];
 
   const prevPeriod = () => {
@@ -139,16 +140,20 @@ export default function ClienteCalendarioPage() {
           <div className="grid grid-cols-7 border-b">{DAY_NAMES.map(d => <div key={d} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground bg-muted/30">{d}</div>)}</div>
           <div className="grid grid-cols-7">
             {calendarDays.map((dayInfo, i) => {
-              const posts = monthData?.posts?.[dayInfo.date] || []; const dayHolidays = holidays.get(dayInfo.date) || []; const isToday = dayInfo.date === today;
+              const posts = monthData?.posts?.[dayInfo.date] || []; const dayHolidays = holidays.get(dayInfo.date) || []; const dayMisc = miscDays.get(dayInfo.date) || []; const isToday = dayInfo.date === today;
               const hasReview = posts.some((p: any) => p.status === "IN_REVIEW");
               return (
                 <div key={i} className={cn("min-h-[90px] p-1.5 border-b border-r cursor-pointer transition-colors hover:bg-accent/30", !dayInfo.isCurrentMonth && "bg-muted/20 opacity-50", isToday && "bg-blue-50 dark:bg-blue-950/20", hasReview && dayInfo.isCurrentMonth && "bg-yellow-50/50 dark:bg-yellow-950/10", dayHolidays.length > 0 && dayInfo.isCurrentMonth && "bg-amber-50/50 dark:bg-amber-950/10")}
                   onClick={() => { if (posts.length > 0) setSelectedDay(dayInfo.date); }}>
                   <div className="flex items-center justify-between mb-1">
                     <p className={cn("text-xs font-medium", isToday && "text-blue-600 font-bold", !dayInfo.isCurrentMonth && "text-muted-foreground")}>{dayInfo.day}</p>
-                    {dayHolidays.length > 0 && <span className="text-[9px] text-amber-600 dark:text-amber-400" title={dayHolidays.map(h => h.name).join(", ")}>★</span>}
+                    <div className="flex items-center gap-0.5">
+                      {dayMisc.length > 0 && <span className="text-[10px]" title={dayMisc.map(d => `${d.emoji} ${d.name}`).join(", ")}>{dayMisc[0].emoji}</span>}
+                      {dayHolidays.length > 0 && <span className="text-[9px] text-amber-600 dark:text-amber-400" title={dayHolidays.map(h => h.name).join(", ")}>★</span>}
+                    </div>
                   </div>
-                  {dayHolidays.length > 0 && dayInfo.isCurrentMonth && <p className="text-[9px] text-amber-600 dark:text-amber-400 leading-tight mb-1 truncate">{dayHolidays[0].name}</p>}
+                  {dayHolidays.length > 0 && dayInfo.isCurrentMonth && <p className="text-[9px] text-amber-600 dark:text-amber-400 leading-tight mb-0.5 truncate">{dayHolidays[0].name}</p>}
+                  {dayMisc.length > 0 && dayInfo.isCurrentMonth && <p className="text-[9px] text-violet-600 dark:text-violet-400 leading-tight mb-0.5 truncate">{dayMisc[0].name}</p>}
                   <div className="flex flex-wrap gap-1">
                     {posts.slice(0, 4).map((post: any, j: number) => (<div key={j} className="w-2.5 h-2.5 rounded-full ring-1 ring-white dark:ring-zinc-900" style={{ backgroundColor: NETWORK_COLORS[post.network as SocialNetwork] || "#888" }} title={`${NETWORK_LABELS[post.network as SocialNetwork]} — ${post.title || "Sin título"}`} />))}
                     {posts.length > 4 && <span className="text-[9px] text-muted-foreground">+{posts.length - 4}</span>}
