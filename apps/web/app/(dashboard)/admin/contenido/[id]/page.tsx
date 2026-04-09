@@ -78,6 +78,10 @@ export default function PostDetailPage() {
 
   const { data: post, isLoading, refetch } = trpc.posts.get.useQuery({ id: postId });
   const { data: agencyTimezone } = trpc.agencies.getTimezone.useQuery();
+  const { data: publishLogs } = trpc.publishing.getPublishLogs.useQuery(
+    { postId },
+    { enabled: !!postId }
+  );
 
   const updateStatus = trpc.posts.updateStatus.useMutation({
     onSuccess: (data, variables) => {
@@ -554,6 +558,85 @@ export default function PostDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Publish logs */}
+          {publishLogs && publishLogs.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  Registro de publicación
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {publishLogs.map((log) => {
+                    const isSuccess = log.status === "SUCCESS";
+                    const networkLabel = NETWORK_LABELS[(log.network as SocialNetwork)] || log.network;
+                    const accountName = log.socialNetwork?.accountName || log.agencyAccount?.accountName || "";
+                    return (
+                      <div
+                        key={log.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${
+                          isSuccess
+                            ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900"
+                            : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900"
+                        }`}
+                      >
+                        {isSuccess ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                              style={{ backgroundColor: NETWORK_COLORS[log.network as SocialNetwork] || "#888" }}
+                            >
+                              {networkLabel}
+                            </span>
+                            {accountName && (
+                              <span className="text-xs text-muted-foreground">{accountName}</span>
+                            )}
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {new Date(log.attemptedAt).toLocaleDateString("es", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          {log.errorMessage && (
+                            <p className="text-xs text-red-700 dark:text-red-400 mt-1.5 font-mono bg-red-100 dark:bg-red-950/40 rounded px-2 py-1 break-all">
+                              {log.errorMessage}
+                            </p>
+                          )}
+                          {isSuccess && log.platformUrl && (
+                            <a
+                              href={log.platformUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center gap-1 hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Ver publicación
+                            </a>
+                          )}
+                          {isSuccess && !log.platformUrl && log.platformPostId && (
+                            <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                              ID: {log.platformPostId}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Mirror group */}
           {post.mirrorGroupId && (

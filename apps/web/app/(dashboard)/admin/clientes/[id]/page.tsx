@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -28,49 +28,73 @@ import {
   Eye,
   Trash2,
   Send,
+  CalendarDays,
+  Pencil,
+  Save,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Topbar } from "@/components/layout/topbar";
 import { ClientPageSelector } from "@/components/social-networks/client-page-selector";
 import { ClientSocialNetworksEditor } from "@/components/social-networks/client-social-networks-editor";
+import { EmojiPicker } from "@/components/ui/emoji-picker";
 
 // ── Network metadata ──────────────────────────────────────────────────────────
 const NETWORK_META: Record<
   string,
-  { label: string; color: string; icon: string; note?: string; available: boolean }
+  { label: string; color: string; icon: React.ReactNode; note?: string; available: boolean }
 > = {
   FACEBOOK: {
     label: "Facebook",
     color: "#1877F2",
-    icon: "🟦",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+      </svg>
+    ),
     note: "Publica en tu Página de Facebook",
     available: true,
   },
   INSTAGRAM: {
     label: "Instagram",
     color: "#E1306C",
-    icon: "📸",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+      </svg>
+    ),
     note: "Requiere cuenta Business vinculada a una Página de Facebook",
     available: true,
   },
   LINKEDIN: {
     label: "LinkedIn",
     color: "#0A66C2",
-    icon: "🔵",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+      </svg>
+    ),
     note: "Publica en tu perfil personal o página de empresa",
     available: true,
   },
   X: {
     label: "X (Twitter)",
     color: "#000000",
-    icon: "𝕏",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.737l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+      </svg>
+    ),
     note: "Requiere API Basic ($200/mes) — contactar admin",
     available: false,
   },
   TIKTOK: {
     label: "TikTok",
     color: "#010101",
-    icon: "🎵",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+        <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.79 1.54V6.76a4.85 4.85 0 01-1.03-.07z"/>
+      </svg>
+    ),
     note: "Publica videos en TikTok",
     available: true,
   },
@@ -176,6 +200,21 @@ export default function ClientDetailPage() {
 
   const removeContactMutation = trpc.clientContacts.remove.useMutation({
     onSuccess: () => { toast({ title: "Contacto eliminado" }); refetchContacts(); setOpenContactMenu(null); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // ── Day Themes ─────────────────────────────────────────────────────────────
+  const { data: dayThemesData, refetch: refetchDayThemes } = trpc.dayThemes.getForClient.useQuery(
+    { clientId },
+    { enabled: activeTab === "temas" }
+  );
+  const [themeForm, setThemeForm] = useState<Record<number, { theme: string; emoji: string }>>({});
+  const upsertThemeMutation = trpc.dayThemes.upsert.useMutation({
+    onSuccess: () => { toast({ title: "Tema guardado" }); refetchDayThemes(); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+  const deleteThemeMutation = trpc.dayThemes.delete.useMutation({
+    onSuccess: () => { toast({ title: "Tema eliminado" }); refetchDayThemes(); },
     onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
@@ -288,6 +327,10 @@ export default function ClientDetailPage() {
             <Share2 className="h-4 w-4 mr-2" />
             Redes Sociales
           </TabsTrigger>
+          <TabsTrigger value="temas">
+            <CalendarDays className="h-4 w-4 mr-2" />
+            Temas
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Info Tab ─────────────────────────────────────────────────────── */}
@@ -322,17 +365,25 @@ export default function ClientDetailPage() {
                     Redes configuradas
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {(client as any).socialNetworks.map((sn: any) => {
+                    {/* Deduplicate by network type — show one badge per network */}
+                    {Array.from(
+                      new Map((client as any).socialNetworks.map((sn: any) => [sn.network, sn])).values()
+                    ).map((sn: any) => {
                       const meta = NETWORK_META[sn.network];
+                      const allForNetwork = (client as any).socialNetworks.filter((n: any) => n.network === sn.network);
+                      const anyConnected = allForNetwork.some((n: any) => n.connectedAt);
+                      const count = allForNetwork.length;
                       return (
                         <Badge
                           key={sn.network}
-                          variant={sn.isActive ? "default" : "outline"}
-                          className="gap-1"
+                          variant="secondary"
+                          className="gap-1.5 text-xs"
                         >
-                          {meta?.icon} {meta?.label ?? sn.network}
-                          {sn.connectedAt ? (
-                            <CheckCircle2 className="h-3 w-3 text-green-400" />
+                          <span className="flex items-center justify-center w-3.5 h-3.5">{meta?.icon}</span>
+                          {meta?.label ?? sn.network}
+                          {count > 1 && <span className="text-[10px] opacity-60">×{count}</span>}
+                          {anyConnected ? (
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
                           ) : (
                             <XCircle className="h-3 w-3 text-muted-foreground" />
                           )}
@@ -585,11 +636,14 @@ export default function ClientDetailPage() {
                             </button>
                             {/* Remove */}
                             <button
-                              className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 text-destructive"
+                              className="w-full text-left px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-destructive"
                               onClick={() => {
-                                if (confirm(`¿Eliminar a ${contact.user?.name}? Esta acción no se puede deshacer.`)) {
-                                  removeContactMutation.mutate({ contactId: contact.id });
-                                }
+                                setOpenContactMenu(null);
+                                setTimeout(() => {
+                                  if (window.confirm(`¿Eliminar a ${contact.user?.name}?\n\nEsta acción eliminará al contacto permanentemente y no se puede deshacer.`)) {
+                                    removeContactMutation.mutate({ contactId: contact.id });
+                                  }
+                                }, 50);
                               }}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -741,6 +795,88 @@ export default function ClientDetailPage() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Temas Tab ─────────────────────────────────────────────────────── */}
+        <TabsContent value="temas" className="space-y-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold">Temas por Día de la Semana</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Define el tema de contenido para cada día. Se mostrarán en el calendario.
+                  </p>
+                </div>
+              </div>
+              {(() => {
+                const DAY_LABELS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+                // Show Mon–Sun order (1,2,3,4,5,6,0)
+                const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+                const existingMap: Record<number, any> = {};
+                if (dayThemesData) dayThemesData.forEach((t: any) => { existingMap[t.dayOfWeek] = t; });
+                return (
+                  <div className="space-y-3">
+                    {dayOrder.map((dow) => {
+                      const existing = existingMap[dow];
+                      const formVal = themeForm[dow] ?? { theme: existing?.theme ?? "", emoji: existing?.emoji ?? "" };
+                      const isDirty = formVal.theme !== (existing?.theme ?? "") || formVal.emoji !== (existing?.emoji ?? "");
+                      return (
+                        <div key={dow} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+                          <div className="w-24 shrink-0">
+                            <p className="text-sm font-medium">{DAY_LABELS[dow]}</p>
+                            {existing?.isActive === false && (
+                              <span className="text-[10px] text-muted-foreground">Desactivado</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            className="h-8 text-sm border rounded-md px-2 flex-1 bg-background"
+                            placeholder="ej. Sabías qué...?"
+                            value={formVal.theme}
+                            onChange={(e) => setThemeForm((prev) => ({ ...prev, [dow]: { ...formVal, theme: e.target.value } }))}
+                          />
+                          <EmojiPicker
+                            value={formVal.emoji}
+                            onChange={(emoji) => setThemeForm((prev) => ({ ...prev, [dow]: { ...formVal, emoji } }))}
+                          />
+                          <Button
+                            size="sm"
+                            variant={isDirty ? "default" : "outline"}
+                            disabled={!formVal.theme.trim() || upsertThemeMutation.isPending}
+                            onClick={() => {
+                              upsertThemeMutation.mutate({
+                                clientId,
+                                dayOfWeek: dow,
+                                theme: formVal.theme.trim(),
+                                emoji: formVal.emoji.trim() || null,
+                                isActive: true,
+                              }, {
+                                onSuccess: () => setThemeForm((prev) => { const n = { ...prev }; delete n[dow]; return n; }),
+                              });
+                            }}
+                          >
+                            <Save className="h-3.5 w-3.5" />
+                          </Button>
+                          {existing && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deleteThemeMutation.isPending}
+                              onClick={() => deleteThemeMutation.mutate({ id: existing.id })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       </div>

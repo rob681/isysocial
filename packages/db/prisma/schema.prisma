@@ -252,10 +252,30 @@ model ClientProfile {
   guidedReviewSessions   GuidedReviewSession[]
   brandBrochureSessions  BrandBrochureSession[]
   contacts               ClientContact[]
+  dayThemes              ClientDayTheme[]
 
   @@index([agencyId])
   @@index([groupId])
   @@map("iso_client_profiles")
+  @@schema("isysocial")
+}
+
+// ─── CLIENT DAY THEMES (temas por día de la semana por cliente) ───────────────
+
+model ClientDayTheme {
+  id              String        @id @default(cuid())
+  clientProfileId String
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  dayOfWeek       Int           // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  theme           String        // e.g. "Sabías qué...?", "Lifestyle"
+  emoji           String?       // optional emoji for the theme
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([clientProfileId, dayOfWeek])
+  @@index([clientProfileId])
+  @@map("iso_client_day_themes")
   @@schema("isysocial")
 }
 
@@ -871,5 +891,22 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
 
   @@map("iso_system_config")
+  @@schema("isysocial")
+}
+
+// ─── REALTIME EVENTS (SSE event bus for cache invalidation) ──────────────────
+// Server writes events here after mutations; SSE endpoint polls and pushes to clients.
+// Events auto-expire — only ~5 min of history needed for delivery.
+model RealtimeEvent {
+  id        String   @id @default(cuid())
+  agencyId  String
+  type      String   // POST_CREATED | POST_UPDATED | POST_STATUS_CHANGED | COMMENT_ADDED | POST_PUBLISHED | CALENDAR_UPDATED | IDEA_UPDATED
+  postId    String?  // target post (for targeted invalidation)
+  clientId  String?  // target client
+  payload   Json?    // extra context if needed
+  createdAt DateTime @default(now())
+
+  @@index([agencyId, createdAt])
+  @@map("iso_realtime_events")
   @@schema("isysocial")
 }

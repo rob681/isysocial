@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { NotificationListener } from "@/components/layout/notification-listener";
+import { RealtimeListener } from "@/components/layout/realtime-listener";
 import { FCMRegister } from "@/components/layout/fcm-register";
 import { TourProvider } from "@/components/tour/tour-provider";
 import "@/components/tour/tour-styles.css";
@@ -15,6 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
       <NotificationListener />
+      <RealtimeListener />
       <FCMRegister />
       <TourProvider />
     </SidebarProvider>

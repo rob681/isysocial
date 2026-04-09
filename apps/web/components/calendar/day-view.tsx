@@ -34,9 +34,10 @@ interface DayViewProps {
   postsByHour: Record<number, DayViewPost[]>;
   allPosts: DayViewPost[];
   basePath: string;
+  dayThemeMap?: Record<number, { theme: string; emoji?: string | null }>;
 }
 
-export function DayView({ date, postsByHour, allPosts, basePath }: DayViewProps) {
+export function DayView({ date, postsByHour, allPosts, basePath, dayThemeMap }: DayViewProps) {
   const dateObj = new Date(date + "T12:00:00");
   const formattedDate = dateObj.toLocaleDateString("es", {
     weekday: "long",
@@ -45,14 +46,25 @@ export function DayView({ date, postsByHour, allPosts, basePath }: DayViewProps)
     year: "numeric",
   });
 
+  // Get day theme (0=Sun, 1=Mon...6=Sat)
+  const dow = dateObj.getDay(); // JS getDay(): 0=Sun, 1=Mon... 6=Sat
+  const theme = dayThemeMap?.[dow];
+
   // Posts without scheduled time
   const unscheduledPosts = allPosts.filter((p) => !p.scheduledAt);
 
   return (
     <div className="space-y-4">
       {/* Date header */}
-      <div className="text-center">
+      <div className="text-center space-y-2">
         <h3 className="text-lg font-semibold capitalize">{formattedDate}</h3>
+        {theme && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold shadow-sm"
+            style={{ background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)" }}>
+            <span className="text-base">{theme.emoji || "🏷️"}</span>
+            <span>Tema del día: {theme.theme}</span>
+          </div>
+        )}
         <p className="text-sm text-muted-foreground">
           {allPosts.length} publicacion{allPosts.length !== 1 ? "es" : ""}
         </p>

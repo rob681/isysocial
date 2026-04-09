@@ -24,16 +24,23 @@ const QUICK_PRESETS = [
   { label: "Mañana 7pm", days: 1, hour: 19 },
 ];
 
+// datetime-local inputs expect LOCAL time, not UTC.
+// toISOString() gives UTC so we must subtract the timezone offset first.
+function toLocalDatetimeString(date: Date): string {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function getMinDatetime() {
   const now = new Date();
   now.setMinutes(now.getMinutes() + 5); // at least 5 min from now
-  return now.toISOString().slice(0, 16);
+  return toLocalDatetimeString(now);
 }
 
 function getMaxDatetime() {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().slice(0, 16);
+  return toLocalDatetimeString(d);
 }
 
 export function SchedulePopover({ value, onChange, network, clientId }: SchedulePopoverProps) {
@@ -73,7 +80,7 @@ export function SchedulePopover({ value, onChange, network, clientId }: Schedule
       d.setDate(d.getDate() + preset.days);
       d.setHours(preset.hour || 9, 0, 0, 0);
     }
-    onChange(d.toISOString().slice(0, 16));
+    onChange(toLocalDatetimeString(d));
   };
 
   return (

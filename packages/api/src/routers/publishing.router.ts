@@ -11,6 +11,7 @@ import {
 } from "../trpc";
 import { publishToNetwork } from "../lib/publishers/index";
 import type { SocialNetwork } from "@isysocial/db";
+import { broadcastEvent } from "../lib/realtime-events";
 
 export const publishingRouter = router({
   // ─── Get network connection status for a client ───────────────────────────
@@ -320,6 +321,15 @@ export const publishingRouter = router({
           },
         });
       }
+
+      // Broadcast real-time event
+      void broadcastEvent(ctx.db, {
+        agencyId,
+        type: "POST_PUBLISHED",
+        postId: post.id,
+        clientId: post.clientId,
+        payload: { anySuccess },
+      });
 
       return { results, anySuccess };
     }),

@@ -183,7 +183,23 @@ export async function GET(
         throw new Error(tokenData.error?.message ?? "Error obteniendo token de Meta");
       }
       accessToken = tokenData.access_token;
-      if (tokenData.expires_in) {
+
+      // Exchange short-lived user token for long-lived (60 days)
+      const llParams = new URLSearchParams({
+        grant_type: "fb_exchange_token",
+        client_id: tokenConfig.clientId,
+        client_secret: tokenConfig.clientSecret,
+        fb_exchange_token: accessToken,
+      });
+      const llRes = await fetch(`${tokenConfig.tokenUrl}?${llParams}`);
+      const llData = await llRes.json();
+      if (llRes.ok && llData.access_token) {
+        accessToken = llData.access_token;
+        if (llData.expires_in) {
+          tokenExpiresAt = new Date(Date.now() + llData.expires_in * 1000);
+        }
+      } else if (tokenData.expires_in) {
+        // Fallback: use short-lived expiry
         tokenExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
       }
     }

@@ -26,8 +26,11 @@ interface KanbanPost {
   copy: string | null;
   network: string;
   status: string;
+  mirrorGroupId?: string | null;
   media?: { id: string; fileUrl: string; mimeType: string }[];
   client?: { companyName: string; logoUrl: string | null } | null;
+  // mirrors populated during grouping
+  _mirrors?: KanbanPost[];
 }
 
 interface ContentKanbanProps {
@@ -91,12 +94,26 @@ function KanbanCard({
             {post.client.companyName}
           </p>
         )}
-        <div className="flex items-center gap-1.5 mt-1">
-          <span
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: networkColor }}
-          />
-          <span className="text-[10px] text-muted-foreground">{networkLabel}</span>
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
+          {post._mirrors && post._mirrors.length > 1 ? (
+            post._mirrors.map((m) => (
+              <span key={m.id} className="flex items-center gap-1">
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: NETWORK_COLORS[m.network as SocialNetwork] || "#888" }}
+                />
+                <span className="text-[10px] text-muted-foreground">{NETWORK_LABELS[m.network as SocialNetwork]}</span>
+              </span>
+            ))
+          ) : (
+            <>
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: networkColor }}
+              />
+              <span className="text-[10px] text-muted-foreground">{networkLabel}</span>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -193,12 +210,26 @@ export function ContentKanban({ posts, basePath, showClient = false, onStatusCha
     })
   );
 
+  // Collapse mirror posts into primary (first in group) before distributing
+  const seenMirrors = new Set<string>();
+  const dedupedPosts: KanbanPost[] = [];
+  for (const post of posts) {
+    if (post.mirrorGroupId) {
+      if (seenMirrors.has(post.mirrorGroupId)) continue;
+      seenMirrors.add(post.mirrorGroupId);
+      const mirrors = posts.filter((p) => p.mirrorGroupId === post.mirrorGroupId);
+      dedupedPosts.push({ ...post, _mirrors: mirrors });
+    } else {
+      dedupedPosts.push(post);
+    }
+  }
+
   // Group posts by status
   const postsByStatus: Record<string, KanbanPost[]> = {};
   for (const col of KANBAN_COLUMNS) {
     postsByStatus[col.status] = [];
   }
-  for (const post of posts) {
+  for (const post of dedupedPosts) {
     if (postsByStatus[post.status]) {
       postsByStatus[post.status].push(post);
     }

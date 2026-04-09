@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ArrowLeft, Save, Lightbulb, Upload, X, Image } from "lucide-react";
+import { Loader2, ArrowLeft, Save, Lightbulb, Upload, X, Image, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Topbar } from "@/components/layout/topbar";
 
@@ -20,7 +20,7 @@ export default function ClienteNuevaIdeaPage() {
   const [description, setDescription] = useState("");
   const [copyIdeas, setCopyIdeas] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string; isVideo: boolean }[]>([]);
 
   const createIdea = trpc.ideas.createClientIdea.useMutation({
     onSuccess: async (idea) => {
@@ -64,6 +64,7 @@ export default function ClienteNuevaIdeaPage() {
     const newFiles = Array.from(files).map((file) => ({
       file,
       preview: URL.createObjectURL(file),
+      isVideo: file.type.startsWith("video/"),
     }));
     setPendingFiles((prev) => [...prev, ...newFiles]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -149,12 +150,12 @@ export default function ClienteNuevaIdeaPage() {
             </CardContent>
           </Card>
 
-          {/* Images */}
+          {/* Media */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Image className="h-4 w-4" />
-                Imágenes de referencia
+                Archivos de referencia
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -162,7 +163,14 @@ export default function ClienteNuevaIdeaPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {pendingFiles.map((pf, idx) => (
                     <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 group">
-                      <img src={pf.preview} alt={pf.file.name} className="w-full h-full object-cover" />
+                      {pf.isVideo ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                          <Film className="h-8 w-8 text-muted-foreground/60" />
+                          <p className="text-[10px] text-muted-foreground text-center px-2 truncate w-full">{pf.file.name}</p>
+                        </div>
+                      ) : (
+                        <img src={pf.preview} alt={pf.file.name} className="w-full h-full object-cover" />
+                      )}
                       <button
                         type="button"
                         className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -177,7 +185,7 @@ export default function ClienteNuevaIdeaPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 multiple
                 className="hidden"
                 onChange={handleAddFiles}
@@ -190,10 +198,10 @@ export default function ClienteNuevaIdeaPage() {
                 disabled={isSaving}
               >
                 <Upload className="h-4 w-4 mr-2" />
-                {pendingFiles.length > 0 ? "Agregar más imágenes" : "Seleccionar imágenes"}
+                {pendingFiles.length > 0 ? "Agregar más archivos" : "Seleccionar imágenes o videos"}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Adjunta fotos, capturas de pantalla o imágenes de inspiración
+                Adjunta fotos, videos, capturas de pantalla o imágenes de inspiración
               </p>
             </CardContent>
           </Card>

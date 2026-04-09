@@ -183,6 +183,16 @@ export async function GET(req: NextRequest) {
       `${successCount} published, ${failCount} failed`
   );
 
+  // Clean up old realtime events (older than 10 min) to keep the table lean
+  try {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    await (db as any).realtimeEvent.deleteMany({
+      where: { createdAt: { lt: tenMinutesAgo } },
+    });
+  } catch {
+    // Non-critical
+  }
+
   return NextResponse.json({
     processed: scheduledPosts.length,
     published: successCount,

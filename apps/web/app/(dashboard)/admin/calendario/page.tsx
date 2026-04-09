@@ -30,9 +30,10 @@ import {
   POST_TYPE_LABELS,
   POST_STATUS_DOT_COLORS,
   getHolidaysForMonth,
+  getMiscDaysForMonth,
   HOLIDAY_REGION_LABELS,
 } from "@isysocial/shared";
-import type { SocialNetwork, PostStatus, PostType, HolidayRegion } from "@isysocial/shared";
+import type { SocialNetwork, PostStatus, PostType, HolidayRegion, MiscDay } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
 import { WeekView } from "@/components/calendar/week-view";
@@ -110,6 +111,18 @@ function CalendarioPageInner() {
 
   const clientFilter = filterClient !== "ALL" ? filterClient : undefined;
 
+  // Day themes for the selected client
+  const { data: dayThemes } = trpc.dayThemes.getForClient.useQuery(
+    { clientId: filterClient },
+    { enabled: filterClient !== "ALL" && !!filterClient }
+  );
+  // Map dayOfWeek → theme for quick lookup (0=Sun, 1=Mon…6=Sat)
+  const dayThemeMap = useMemo(() => {
+    const map: Record<number, { theme: string; emoji?: string | null }> = {};
+    if (dayThemes) dayThemes.forEach((t) => { if (t.isActive) map[t.dayOfWeek] = { theme: t.theme, emoji: t.emoji }; });
+    return map;
+  }, [dayThemes]);
+
   const { data: monthData, isLoading: monthLoading } = trpc.calendar.getMonth.useQuery(
     { year, month, clientId: clientFilter },
     { enabled: viewMode === "month" }
@@ -126,6 +139,7 @@ function CalendarioPageInner() {
 
   const calendarDays = useMemo(() => getCalendarDays(year, month), [year, month]);
   const holidays = useMemo(() => getHolidaysForMonth(year, month, holidayRegions), [year, month, holidayRegions]);
+  const miscDays = useMemo(() => getMiscDaysForMonth(year, month), [year, month]);
   const today = now.toISOString().split("T")[0];
 
   const prevPeriod = () => {
@@ -248,20 +262,40 @@ function CalendarioPageInner() {
       {isLoading ? (
         <Skeleton className="h-[600px] w-full rounded-lg" />
       ) : viewMode === "week" && weekData ? (
-        <WeekView startDate={weekData.startDate} postsByDay={weekData.posts as any} basePath="/admin/contenido" />
+        <WeekView startDate={weekData.startDate} postsByDay={weekData.posts as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
       ) : viewMode === "day" && dayData ? (
-        <DayView date={dayData.date} postsByHour={dayData.byHour as any} allPosts={dayData.posts as any} basePath="/admin/contenido" />
+        <DayView date={dayData.date} postsByHour={dayData.byHour as any} allPosts={dayData.posts as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
       ) : (
         <div className="border rounded-lg overflow-hidden bg-card">
           <div className="grid grid-cols-7 border-b">
-            {DAY_NAMES.map((d) => (
-              <div key={d} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground bg-muted/30">{d}</div>
-            ))}
+            {DAY_NAMES.map((d, idx) => {
+              // DAY_NAMES[0]=Lun(1), [1]=Mar(2), ..., [5]=Sáb(6), [6]=Dom(0)
+              const dow = idx === 6 ? 0 : idx + 1;
+              const theme = dayThemeMap[dow];
+              return (
+                <div key={d} className={cn("px-2 py-2 text-center", theme ? "bg-indigo-50/60 dark:bg-indigo-950/20" : "bg-muted/30")}>
+                  <p className="text-xs font-semibold text-muted-foreground">{d}</p>
+                  {theme && (
+                    <div className="mt-1 mx-auto max-w-full">
+                      <span
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-white leading-tight truncate max-w-full"
+                        style={{ background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)" }}
+                        title={theme.theme}
+                      >
+                        <span className="flex-shrink-0">{theme.emoji || "🏷️"}</span>
+                        <span className="truncate">{theme.theme}</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((dayInfo, i) => {
               const posts = monthData?.posts?.[dayInfo.date] || [];
               const dayHolidays = holidays.get(dayInfo.date) || [];
+              const dayMisc = miscDays.get(dayInfo.date) || [];
               const isToday = dayInfo.date === today;
               return (
                 <div key={i}
@@ -272,10 +306,20 @@ function CalendarioPageInner() {
                   onClick={() => { if (posts.length > 0) setSelectedDay(dayInfo.date); }}>
                   <div className="flex items-center justify-between mb-1">
                     <p className={cn("text-xs font-medium", isToday && "text-blue-600 font-bold", !dayInfo.isCurrentMonth && "text-muted-foreground")}>{dayInfo.day}</p>
-                    {dayHolidays.length > 0 && <span className="text-[9px] text-amber-600 dark:text-amber-400" title={dayHolidays.map((h) => h.name).join(", ")}>★</span>}
+                    <div className="flex items-center gap-0.5">
+                      {dayMisc.length > 0 && (
+                        <span className="text-[10px]" title={dayMisc.map((d) => `${d.emoji} ${d.name}`).join(", ")}>
+                          {dayMisc[0].emoji}
+                        </span>
+                      )}
+                      {dayHolidays.length > 0 && <span className="text-[9px] text-amber-600 dark:text-amber-400" title={dayHolidays.map((h) => h.name).join(", ")}>★</span>}
+                    </div>
                   </div>
                   {dayHolidays.length > 0 && dayInfo.isCurrentMonth && (
-                    <p className="text-[9px] text-amber-600 dark:text-amber-400 leading-tight mb-1 truncate" title={dayHolidays.map((h) => h.name).join(", ")}>{dayHolidays[0].name}</p>
+                    <p className="text-[9px] text-amber-600 dark:text-amber-400 leading-tight mb-0.5 truncate" title={dayHolidays.map((h) => h.name).join(", ")}>{dayHolidays[0].name}</p>
+                  )}
+                  {dayMisc.length > 0 && dayInfo.isCurrentMonth && (
+                    <p className="text-[9px] text-violet-600 dark:text-violet-400 leading-tight mb-1 truncate" title={dayMisc.map((d) => d.name).join(", ")}>{dayMisc[0].name}</p>
                   )}
                   <div className="flex flex-wrap gap-1">
                     {posts.slice(0, 4).map((post: any, j: number) => (

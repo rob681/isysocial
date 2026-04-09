@@ -23,6 +23,8 @@
     --input: 220 20% 90%;
     --ring: 221 83% 53%;
     --radius: 0.75rem;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
     --sidebar: 220 25% 95%;
     --sidebar-icon: 220 30% 98%;
 
@@ -50,6 +52,8 @@
     --border: 222 20% 18%;
     --input: 222 20% 18%;
     --ring: 221 83% 60%;
+    --popover: 222 30% 11%;
+    --popover-foreground: 220 20% 92%;
     --sidebar: 222 35% 8%;
     --sidebar-icon: 222 40% 10%;
 

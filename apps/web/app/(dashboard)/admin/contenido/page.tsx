@@ -516,7 +516,21 @@ function ContenidoPageInner() {
             </div>
           )}
 
-          {data.posts.map((post) => {
+          {/* Group mirror posts with the same mirrorGroupId into one card */}
+          {(() => {
+            const seen = new Set<string>();
+            const grouped: Array<{ primary: typeof data.posts[0]; mirrors: typeof data.posts }> = [];
+            for (const post of data.posts) {
+              const mgId = (post as any).mirrorGroupId;
+              if (mgId) {
+                if (seen.has(mgId)) continue;
+                seen.add(mgId);
+                grouped.push({ primary: post, mirrors: data.posts.filter((p) => (p as any).mirrorGroupId === mgId) });
+              } else {
+                grouped.push({ primary: post, mirrors: [post] });
+              }
+            }
+            return grouped.map(({ primary: post, mirrors }) => {
             const statusColor = POST_STATUS_COLORS[post.status as PostStatus] || "";
             const networkColor = NETWORK_COLORS[post.network as SocialNetwork] || "#888";
             const thumbnail = post.media?.[0]?.fileUrl;
@@ -557,17 +571,28 @@ function ContenidoPageInner() {
                           <p className="font-medium truncate">
                             {post.title || post.copy?.slice(0, 60) || "Sin título"}
                           </p>
-                          {(post as any).mirrorGroupId && (
-                            <span title="Mirror post"><Link2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" /></span>
+                          {mirrors.length > 1 && (
+                            <span title={`Publicado en ${mirrors.length} redes`}><Link2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" /></span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
-                            style={{ backgroundColor: networkColor }}
-                          >
-                            {NETWORK_LABELS[post.network as SocialNetwork]}
-                          </span>
+                          {mirrors.length > 1 ? (
+                            mirrors.map((m) => (
+                              <span key={m.id}
+                                className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
+                                style={{ backgroundColor: NETWORK_COLORS[m.network as SocialNetwork] || "#888" }}
+                              >
+                                {NETWORK_LABELS[m.network as SocialNetwork]}
+                              </span>
+                            ))
+                          ) : (
+                            <span
+                              className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
+                              style={{ backgroundColor: networkColor }}
+                            >
+                              {NETWORK_LABELS[post.network as SocialNetwork]}
+                            </span>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {POST_TYPE_LABELS[post.postType as PostType]}
                           </span>
@@ -615,7 +640,8 @@ function ContenidoPageInner() {
                 </CardContent>
               </Card>
             );
-          })}
+          });
+          })()}
 
           {/* Pagination */}
           {data.pages > 1 && (

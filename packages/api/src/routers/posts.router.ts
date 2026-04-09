@@ -18,6 +18,7 @@ import { sendEmailNotification } from "../lib/email";
 import { sendPushNotification } from "../lib/fcm";
 import { notifyIsytask, buildPostPayload } from "../lib/cross-app-notify";
 import { publishToNetwork } from "../lib/publishers";
+import { broadcastEvent } from "../lib/realtime-events";
 
 export const postsRouter = router({
   // ─── Create Post ─────────────────────────────────────────────────────────
@@ -78,6 +79,14 @@ export const postsRouter = router({
           changedById: ctx.session.user.id,
           note: initialStatus === "IN_REVIEW" ? "Post creado y enviado para aprobación" : "Post creado",
         },
+      });
+
+      // Broadcast real-time event
+      void broadcastEvent(ctx.db, {
+        agencyId,
+        type: "POST_CREATED",
+        postId: post.id,
+        clientId: post.clientId,
       });
 
       return post;
@@ -149,7 +158,7 @@ export const postsRouter = router({
         year: z.number().int().optional(),
         search: z.string().optional(),
         page: z.number().int().min(1).default(1),
-        limit: z.number().int().min(1).max(100).default(20),
+        limit: z.number().int().min(1).max(500).default(20),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -302,7 +311,7 @@ export const postsRouter = router({
         });
       }
 
-      return ctx.db.post.update({
+      const updated = await ctx.db.post.update({
         where: { id: input.id },
         data: {
           ...(input.title !== undefined && { title: input.title }),
@@ -316,6 +325,16 @@ export const postsRouter = router({
           ...(input.storyData !== undefined && { storyData: input.storyData as any }),
         },
       });
+
+      // Broadcast real-time event (content/schedule change)
+      void broadcastEvent(ctx.db, {
+        agencyId,
+        type: input.scheduledAt !== undefined ? "CALENDAR_UPDATED" : "POST_UPDATED",
+        postId: post.id,
+        clientId: post.clientId,
+      });
+
+      return updated;
     }),
 
   // ─── Update Status ───────────────────────────────────────────────────────
@@ -766,6 +785,15 @@ export const postsRouter = router({
         }
       }
 
+      // Broadcast real-time event
+      void broadcastEvent(ctx.db, {
+        agencyId,
+        type: "POST_STATUS_CHANGED",
+        postId: post.id,
+        clientId: post.clientId,
+        payload: { fromStatus, toStatus: statusToUpdate },
+      });
+
       return updated;
     }),
 
@@ -1039,6 +1067,14 @@ export const postsRouter = router({
           data: { url: `/notificaciones` },
         }).catch(() => {});
       }
+
+      // Broadcast real-time event
+      void broadcastEvent(ctx.db, {
+        agencyId,
+        type: "COMMENT_ADDED",
+        postId: post.id,
+        clientId: post.clientId,
+      });
 
       return comment;
     }),

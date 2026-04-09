@@ -15,6 +15,8 @@ import type { SocialNetwork, PostStatus, PostType } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 
 const DAY_NAMES_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+// DOW for each index: Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6, Sun=0
+const DAY_INDEX_TO_DOW = [1, 2, 3, 4, 5, 6, 0];
 
 interface WeekViewPost {
   id: string;
@@ -33,6 +35,7 @@ interface WeekViewProps {
   startDate: string; // ISO date of Monday
   postsByDay: Record<string, WeekViewPost[]>;
   basePath: string;
+  dayThemeMap?: Record<number, { theme: string; emoji?: string | null }>;
 }
 
 function getWeekDates(startDate: string): string[] {
@@ -46,7 +49,7 @@ function getWeekDates(startDate: string): string[] {
   return dates;
 }
 
-export function WeekView({ startDate, postsByDay, basePath }: WeekViewProps) {
+export function WeekView({ startDate, postsByDay, basePath, dayThemeMap }: WeekViewProps) {
   const dates = getWeekDates(startDate);
   const today = new Date().toISOString().split("T")[0];
 
@@ -58,6 +61,8 @@ export function WeekView({ startDate, postsByDay, basePath }: WeekViewProps) {
           const isToday = date === today;
           const dayNum = new Date(date + "T12:00:00").getDate();
           const monthName = new Date(date + "T12:00:00").toLocaleDateString("es", { month: "short" });
+          const dow = DAY_INDEX_TO_DOW[i]!;
+          const theme = dayThemeMap?.[dow];
 
           return (
             <div
@@ -69,19 +74,31 @@ export function WeekView({ startDate, postsByDay, basePath }: WeekViewProps) {
             >
               {/* Day header */}
               <div className={cn(
-                "p-2 border-b text-center sticky top-0 bg-card z-10",
-                isToday && "bg-blue-50 dark:bg-blue-950/20"
+                "border-b sticky top-0 z-10 overflow-hidden",
+                isToday ? "bg-blue-50 dark:bg-blue-950/20" : "bg-card"
               )}>
-                <p className="text-[10px] uppercase text-muted-foreground font-medium">
-                  {DAY_NAMES_FULL[i]}
-                </p>
-                <p className={cn(
-                  "text-lg font-bold",
-                  isToday && "text-blue-600"
-                )}>
-                  {dayNum}
-                </p>
-                <p className="text-[10px] text-muted-foreground">{monthName}</p>
+                {/* Theme banner */}
+                {theme && (
+                  <div
+                    className="w-full px-2 py-1 flex items-center justify-center gap-1"
+                    style={{ background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)" }}
+                  >
+                    <span className="text-[11px]">{theme.emoji || "🏷️"}</span>
+                    <span className="text-[10px] font-semibold text-white truncate">{theme.theme}</span>
+                  </div>
+                )}
+                <div className="p-2 text-center">
+                  <p className="text-[10px] uppercase text-muted-foreground font-medium">
+                    {DAY_NAMES_FULL[i]}
+                  </p>
+                  <p className={cn(
+                    "text-lg font-bold",
+                    isToday && "text-blue-600"
+                  )}>
+                    {dayNum}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{monthName}</p>
+                </div>
               </div>
 
               {/* Posts */}

@@ -44,7 +44,7 @@ export default function ClienteContenidoPage() {
   // Persist view preference
   useEffect(() => {
     const saved = localStorage.getItem("isysocial-content-view");
-    if (saved === "grid" || saved === "list") setViewMode(saved);
+    if (saved === "grid" || saved === "list") setViewMode(saved as ViewMode);
   }, []);
   const handleViewChange = (v: ViewMode) => {
     setViewMode(v);
@@ -148,7 +148,7 @@ export default function ClienteContenidoPage() {
         </Select>
 
         <div className="flex-1" />
-        <ViewToggle view={viewMode} onChange={handleViewChange} />
+        <ViewToggle view={viewMode} onChange={handleViewChange} hideKanban />
       </div>
 
       {/* Post list */}

@@ -27,6 +27,7 @@ interface ContentGridPost {
   postType: string;
   status: string;
   scheduledAt: string | Date | null;
+  mirrorGroupId?: string | null;
   media?: { id: string; fileUrl: string; mimeType: string }[];
   _count: { comments: number };
   client?: { companyName: string; logoUrl: string | null } | null;
@@ -43,15 +44,29 @@ interface ContentGridProps {
 export function ContentGrid({ posts, basePath, showClient = false, selectedIds, onToggleSelect }: ContentGridProps) {
   const selectionEnabled = !!selectedIds && !!onToggleSelect;
 
+  // Group mirror posts: collapse posts with same mirrorGroupId into one card
+  const seen = new Set<string>();
+  const grouped: Array<{ primary: ContentGridPost; mirrors: ContentGridPost[] }> = [];
+  for (const post of posts) {
+    if (post.mirrorGroupId) {
+      if (seen.has(post.mirrorGroupId)) continue;
+      seen.add(post.mirrorGroupId);
+      const mirrors = posts.filter((p) => p.mirrorGroupId === post.mirrorGroupId);
+      grouped.push({ primary: post, mirrors });
+    } else {
+      grouped.push({ primary: post, mirrors: [post] });
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-      {posts.map((post) => {
+      {grouped.map(({ primary: post, mirrors }) => {
         const statusColor = POST_STATUS_COLORS[post.status as PostStatus] || "";
-        const networkColor = NETWORK_COLORS[post.network as SocialNetwork] || "#888";
         const thumbnail = post.media?.[0]?.fileUrl;
         const isVideo = post.media?.[0]?.mimeType?.startsWith("video/");
         const needsAction = post.status === "IN_REVIEW";
         const isSelected = selectionEnabled && selectedIds.has(post.id);
+        const isMirror = mirrors.length > 1;
 
         const card = (
           <Card className={`group hover:shadow-lg transition-all duration-200 cursor-pointer overflow-hidden h-full ${needsAction ? "ring-2 ring-yellow-400/50" : ""} ${isSelected ? "ring-2 ring-primary shadow-md" : ""}`}>
@@ -88,14 +103,26 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
                 </Badge>
               </div>
 
-              {/* Network badge overlay */}
-              <div className="absolute top-2 right-2">
-                <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white shadow-sm"
-                  style={{ backgroundColor: networkColor }}
-                >
-                  {NETWORK_LABELS[post.network as SocialNetwork]}
-                </span>
+              {/* Network badge(s) overlay — stacked for mirror posts */}
+              <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
+                {isMirror ? (
+                  mirrors.map((m, idx) => (
+                    <span
+                      key={m.id}
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white shadow-sm"
+                      style={{ backgroundColor: NETWORK_COLORS[m.network as SocialNetwork] || "#888" }}
+                    >
+                      {NETWORK_LABELS[m.network as SocialNetwork]}
+                    </span>
+                  ))
+                ) : (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white shadow-sm"
+                    style={{ backgroundColor: NETWORK_COLORS[post.network as SocialNetwork] || "#888" }}
+                  >
+                    {NETWORK_LABELS[post.network as SocialNetwork]}
+                  </span>
+                )}
               </div>
 
               {/* Multi-image indicator */}
@@ -159,7 +186,6 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
 
         return (
           <div key={post.id} className="relative group">
-            {/* Selection checkbox - outside Link to prevent navigation */}
             {selectionEnabled && (
               <button
                 onClick={(e) => {
@@ -178,8 +204,6 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
                 {isSelected && <Check className="h-3.5 w-3.5" />}
               </button>
             )}
-
-            {/* Card wrapped in Link for navigation */}
             <Link href={`${basePath}/${post.id}`}>
               {card}
             </Link>
