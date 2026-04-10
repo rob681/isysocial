@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Los datos de OAuth han expirado." }, { status: 410 });
   }
 
-  const { clientId, network, pages } = oauthData;
+  const { clientId, network, pages, userAccessToken, accessToken: rootAccessToken } = oauthData;
   const networkEnum = networkEnumMap[network];
 
   if (!networkEnum) {
@@ -63,11 +63,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Página no encontrada en la sesión OAuth." }, { status: 400 });
   }
 
+  // For Facebook: always try to get a page access token.
+  // Either use the one we already have, or try to fetch/exchange for one.
+  const userToken = userAccessToken ?? rootAccessToken;
+  let finalAccessToken = selectedPage.accessToken ?? null;
+
+  if (network === "facebook") {
+    // Try to get/refresh page access token for business pages
+    if (!selectedPage.isPersonalProfile && userToken) {
+      try {
+        const pageTokenRes = await fetch(
+          `https://graph.facebook.com/v20.0/${pageId}?fields=access_token&access_token=${userToken}`
+        );
+        const pageTokenData = await pageTokenRes.json();
+        if (pageTokenData.access_token) {
+          finalAccessToken = pageTokenData.access_token;
+        }
+      } catch {
+        // Failed to fetch page token — will use userToken as fallback
+      }
+    }
+
+    // For personal profile or if no page token available, use user token
+    if (selectedPage.isPersonalProfile || !finalAccessToken) {
+      finalAccessToken = userToken;
+    }
+  }
+
   try {
     let accountId = "";
     let accountName = "";
     let profilePic: string | null = null;
-    let finalPageAccessToken = selectedPage.accessToken;
+    // For Facebook, use finalAccessToken (resolved above). For other networks, use selectedPage.accessToken.
+    let finalPageAccessToken: string | null = network === "facebook" ? finalAccessToken : selectedPage.accessToken;
 
     if (network === "facebook") {
       accountId = selectedPage.id;

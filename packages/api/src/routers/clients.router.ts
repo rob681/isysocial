@@ -812,11 +812,18 @@ export const clientsRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
       }
 
-      // Get assigned pages
-      const pages = await ctx.db.clientSocialNetwork.findMany({
+      // Get assigned pages — exclude ghost records where pageId equals the network name
+      // (these are created as fallbacks when OAuth fails to fetch a real page/account)
+      const NETWORK_NAMES = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"];
+      const allPages = await ctx.db.clientSocialNetwork.findMany({
         where: { clientId: input.clientId, isActive: true },
         orderBy: [{ network: "asc" }, { accountName: "asc" }],
       });
+      // Filter out ghost records: those whose pageId is literally the network name
+      // and have no real accountName or accountId
+      const pages = allPages.filter(
+        (p) => !(NETWORK_NAMES.includes(p.pageId ?? "") && !p.accountName && !(p as any).accountId)
+      );
 
       // Get post counts per network for this client
       const postCounts = await ctx.db.post.groupBy({
@@ -844,7 +851,8 @@ export const clientsRouter = router({
           acc[page.network].push({
             id: page.id,
             pageId: page.pageId,
-            accountName: page.accountName,
+            // Fallback to accountId or pageId if accountName is null (e.g. from old records)
+            accountName: page.accountName || (page as any).accountId || page.pageId || null,
             profilePic: page.profilePic,
             isActive: page.isActive,
             assignedAt: page.assignedAt,

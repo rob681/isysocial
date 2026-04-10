@@ -67,7 +67,8 @@ export const publishingRouter = router({
       const clientResults = clientNetworks.map((n) => ({
         id: n.id,
         network: n.network,
-        connected: !!n.accessToken && n.isActive,
+        // Connected = record exists and is active (regardless of how it was linked)
+        connected: n.isActive,
         accountName: n.accountName,
         profilePic: n.profilePic,
         assignedAt: n.assignedAt,

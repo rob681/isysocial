@@ -104,6 +104,11 @@ export default function SeleccionarPaginaPage() {
                   ? "Tu cuenta de LinkedIn tiene páginas de empresa. Elige cuál conectar a este cliente."
                   : "Tu cuenta de Facebook tiene varias páginas. Elige cuál conectar a este cliente."}
               </p>
+              {!loading && pages.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {pages.length} opción{pages.length !== 1 ? "es" : ""} encontrada{pages.length !== 1 ? "s" : ""}
+                </p>
+              )}
             </div>
           </div>
 

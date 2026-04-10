@@ -212,12 +212,65 @@ export async function GET(
     let pageAccessToken: string | undefined;
 
     if (networkKey === "facebook") {
-      // Get user's Pages
-      const pagesRes = await fetch(
-        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,picture&access_token=${accessToken}`
-      );
-      const pagesData = await pagesRes.json();
-      const pages = pagesData.data ?? [];
+      // Get user's Pages from two sources:
+      // 1. Personal account pages via /me/accounts
+      // 2. Business Manager pages via /me/businesses + /owned_pages
+      // This ensures we show ALL pages the user has access to.
+
+      const allPages: any[] = [];
+
+      // PART 1: Fetch personal account pages
+      // REQUEST `access_token` in fields to get ALL pages user has ANY access to.
+      // Including pages where token might be null (read-only access) — we'll handle
+      // token exchange in finalize-selection for pages that have tokens, and attempt
+      // to fetch page tokens there for pages without.
+      let nextUrl: string | null =
+        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,picture,access_token&limit=100&access_token=${accessToken}`;
+      while (nextUrl) {
+        // eslint-disable-next-line no-await-in-loop
+        const fbPagesFetch: Response = await fetch(nextUrl);
+        // eslint-disable-next-line no-await-in-loop
+        const fbPagesData: any = await fbPagesFetch.json();
+        allPages.push(...(fbPagesData.data ?? []));
+        nextUrl = fbPagesData.paging?.next ?? null;
+      }
+
+      // PART 2: Fetch Business Manager accounts and their pages
+      try {
+        const businessesRes: Response = await fetch(
+          `https://graph.facebook.com/v20.0/me/businesses?fields=id,name&limit=100&access_token=${accessToken}`
+        );
+        const businessesData: any = await businessesRes.json();
+        const businesses = businessesData.data ?? [];
+
+        for (const business of businesses) {
+          let businessPageUrl: string | null =
+            `https://graph.facebook.com/v20.0/${business.id}/owned_pages?fields=id,name,picture&limit=100&access_token=${accessToken}`;
+
+          while (businessPageUrl) {
+            // eslint-disable-next-line no-await-in-loop
+            const businessPagesFetch: Response = await fetch(businessPageUrl);
+            // eslint-disable-next-line no-await-in-loop
+            const businessPagesData: any = await businessPagesFetch.json();
+            const bpages = businessPagesData.data ?? [];
+
+            // Add Business Manager pages to allPages (avoid duplicates by ID)
+            const existingIds = new Set(allPages.map((p: any) => p.id));
+            for (const bp of bpages) {
+              if (!existingIds.has(bp.id)) {
+                allPages.push(bp);
+              }
+            }
+
+            businessPageUrl = businessPagesData.paging?.next ?? null;
+          }
+        }
+      } catch (err) {
+        // Business Manager fetch failed, but we still have personal pages — continue
+        console.error("[facebook callback] Error fetching Business Manager pages:", err);
+      }
+
+      const pages = allPages;
 
       if (pages.length === 0) {
         // Fallback to user info (no pages)
@@ -229,36 +282,95 @@ export async function GET(
         accountName = meData.name;
         profilePic = meData.picture?.data?.url;
       } else if (pages.length === 1) {
-        // Single page — auto-select
-        const page = pages[0];
-        pageId = page.id;
-        accountId = page.id;
-        accountName = page.name;
-        pageAccessToken = page.access_token;
+        // Single business page — show selector including personal profile
+        const meRes = await fetch(
+          `https://graph.facebook.com/v20.0/me?fields=id,name,picture&access_token=${accessToken}`
+        );
+        const meData = await meRes.json();
+        const personalProfile = meData.id
+          ? [{
+              id: meData.id,
+              name: meData.name ?? "Mi perfil personal",
+              accessToken: accessToken,
+              picture: meData.picture?.data?.url ?? null,
+              isPersonalProfile: true,
+            }]
+          : [];
+
+        const p = pages[0];
+        const pagesForSelection = [
+          ...personalProfile,
+          { id: p.id, name: p.name, picture: p.picture?.data?.url ?? null },
+        ];
+
+        if (pagesForSelection.length === 1) {
+          // Only the business page (no personal profile retrieved) — auto-select
+          pageId = p.id;
+          accountId = p.id;
+          accountName = p.name;
+          pageAccessToken = p.access_token;
+        } else {
+          const selectionToken = crypto.randomUUID();
+          await db.systemConfig.upsert({
+            where: { key: `pending_oauth_${selectionToken}` },
+            update: { value: JSON.stringify({ accessToken, userAccessToken: accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
+            create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, userAccessToken: accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
+          });
+          return NextResponse.redirect(
+            `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook&token=${selectionToken}`
+          );
+        }
       } else {
         // Multiple pages — store in SystemConfig and pass token in URL
+        // Also fetch the personal profile so it can be selected (e.g. personal pages/accounts)
+        const meRes = await fetch(
+          `https://graph.facebook.com/v20.0/me?fields=id,name,picture&access_token=${accessToken}`
+        );
+        const meData = await meRes.json();
+        const personalProfile = meData.id
+          ? [{
+              id: meData.id,
+              name: meData.name ?? "Mi perfil personal",
+              accessToken: accessToken,
+              picture: meData.picture?.data?.url ?? null,
+              isPersonalProfile: true,
+            }]
+          : [];
+
         const selectionToken = crypto.randomUUID();
-        const pagesForSelection = pages.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          accessToken: p.access_token,
-          picture: p.picture?.data?.url ?? null,
-        }));
+        const pagesForSelection = [
+          ...personalProfile,
+          ...pages.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            // accessToken is intentionally omitted here — it will be fetched in
+            // finalize-selection using the userAccessToken stored at root level.
+            picture: p.picture?.data?.url ?? null,
+          })),
+        ];
+        // Store userAccessToken at root so finalize-selection can exchange it for a page token
         await db.systemConfig.upsert({
           where: { key: `pending_oauth_${selectionToken}` },
-          update: { value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
-          create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
+          update: { value: JSON.stringify({ accessToken, userAccessToken: accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
+          create: { key: `pending_oauth_${selectionToken}`, value: JSON.stringify({ accessToken, userAccessToken: accessToken, clientId, network: networkKey, pages: pagesForSelection, expiresAt: Date.now() + 600000 }) },
         });
         return NextResponse.redirect(
           `${REDIRECT_BASE}/admin/clientes/${clientId}/seleccionar-pagina?network=facebook&token=${selectionToken}`
         );
       }
     } else if (networkKey === "instagram") {
-      // Get Facebook Pages first, then linked IG accounts
-      const pagesRes = await fetch(
-        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,picture&access_token=${accessToken}`
-      );
-      const pagesData = await pagesRes.json();
+      // Get Facebook Pages first (paginated), then linked IG accounts
+      const igFbPages: any[] = [];
+      let igNextUrl: string | null =
+        `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,picture&limit=100&access_token=${accessToken}`;
+      while (igNextUrl) {
+        // eslint-disable-next-line no-await-in-loop
+        const igPagesFetch: Response = await fetch(igNextUrl);
+        // eslint-disable-next-line no-await-in-loop
+        const igPagesData: any = await igPagesFetch.json();
+        igFbPages.push(...(igPagesData.data ?? []));
+        igNextUrl = igPagesData.paging?.next ?? null;
+      }
 
       // Build array of all pages that have an IG Business Account
       const igPages: Array<{
@@ -271,7 +383,7 @@ export async function GET(
         igProfilePic: string | null;
       }> = [];
 
-      for (const page of pagesData.data ?? []) {
+      for (const page of igFbPages) {
         const igRes = await fetch(
           `https://graph.facebook.com/v20.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
         );
@@ -436,7 +548,8 @@ export async function GET(
     }
 
     // ── Step 3: Upsert ClientSocialNetwork ────────────────────────────────────
-    const pageIdForNetwork = pageId || networkEnum; // Use network as fallback
+    // Use accountId as fallback for pageId to avoid ghost records with network name as pageId
+    const pageIdForNetwork = pageId || accountId || networkEnum;
     await db.clientSocialNetwork.upsert({
       where: {
         clientId_network_pageId: {
