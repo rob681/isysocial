@@ -42,6 +42,7 @@ const formSchema = z.object({
   title: z.string().optional(),
   copy: z.string().optional(),
   hashtags: z.string().optional(),
+  purpose: z.string().max(1000, "Máximo 1000 caracteres").optional(),
   scheduledAt: z.string().optional(),
   revisionsLimit: z.number().int().min(1).max(10).default(3),
   referenceLink: z.string().optional(),
@@ -165,12 +166,18 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
       title: "",
       copy: "",
       hashtags: "",
+      purpose: "",
       scheduledAt: "",
       revisionsLimit: 3,
       referenceLink: "",
       ...defaultValues,
     },
   });
+
+  // Show the "Agregar contexto" panel if a purpose is already set (edit mode)
+  const [showPurpose, setShowPurpose] = useState(
+    Boolean(defaultValues?.purpose && defaultValues.purpose.trim().length > 0)
+  );
 
   const watchedValues = form.watch();
 
@@ -195,12 +202,15 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
   const finalMockupMedia = mockupMedia.length > 0 ? mockupMedia : (defaultMedia || []);
 
   const onSubmit = (data: FormValues, sendForReview = false) => {
+    const trimmedPurpose = data.purpose?.trim() || "";
     if (postId) {
       updateContent.mutate({
         id: postId,
         title: data.title,
         copy: data.copy,
         hashtags: data.hashtags,
+        // Always send so the user can also clear an existing purpose.
+        purpose: trimmedPurpose || null,
         referenceLink: data.referenceLink,
         categoryId: data.categoryId || null,
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
@@ -213,6 +223,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
         title: data.title,
         copy: data.copy,
         hashtags: data.hashtags,
+        ...(trimmedPurpose && { purpose: trimmedPurpose }),
         categoryId: data.categoryId || undefined,
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
         revisionsLimit: data.revisionsLimit,
@@ -520,6 +531,57 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
               placeholder="#marketing #branding #diseño"
               {...form.register("hashtags")}
             />
+          </div>
+
+          {/* Purpose toggle — optional free-text context for the agent */}
+          <div className="space-y-2">
+            {!showPurpose ? (
+              <button
+                type="button"
+                onClick={() => setShowPurpose(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Info className="h-3.5 w-3.5" />
+                Agregar contexto (opcional)
+              </button>
+            ) : (
+              <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <Label htmlFor="purpose" className="text-xs font-medium flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5 text-primary" />
+                      ¿Por qué se está creando esta publicación?
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Ayuda al agente a entender el objetivo (campaña, lanzamiento, respuesta a tendencia…).
+                      No es visible para el cliente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      form.setValue("purpose", "");
+                      setShowPurpose(false);
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Quitar contexto"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <Textarea
+                  id="purpose"
+                  placeholder="Ej: Campaña de Día de la Madre — queremos destacar el descuento del 20%"
+                  rows={3}
+                  maxLength={1000}
+                  className="resize-none text-sm bg-background"
+                  {...form.register("purpose")}
+                />
+                <div className="text-[11px] text-muted-foreground text-right">
+                  {(watchedValues.purpose?.length ?? 0)}/1000
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Isystory Studio Button */}

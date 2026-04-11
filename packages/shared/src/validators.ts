@@ -145,6 +145,8 @@ export const createPostSchema = z.object({
   title: z.string().optional(),
   copy: z.string().optional(),
   hashtags: z.string().optional(),
+  // Optional free-text context ("why this post"). Feeds agent memory.
+  purpose: z.string().max(1000, "Máximo 1000 caracteres").optional(),
   scheduledAt: z.date().optional(),
   revisionsLimit: z.number().int().min(1).max(10).default(3),
   referenceLink: z.string().url().optional().or(z.literal("")),
@@ -158,6 +160,7 @@ export const updatePostContentSchema = z.object({
   title: z.string().optional(),
   copy: z.string().optional(),
   hashtags: z.string().optional(),
+  purpose: z.string().max(1000, "Máximo 1000 caracteres").optional().nullable(),
   referenceLink: z.string().url().optional().or(z.literal("")),
   scheduledAt: z.date().optional().nullable(),
   categoryId: z.string().optional().nullable(),

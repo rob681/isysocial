@@ -62,6 +62,7 @@ export const postsRouter = router({
           title: input.title,
           copy: input.copy,
           hashtags: input.hashtags,
+          purpose: input.purpose?.trim() || null,
           scheduledAt: input.scheduledAt,
           revisionsLimit: input.revisionsLimit,
           referenceLink: input.referenceLink || null,
@@ -317,6 +318,9 @@ export const postsRouter = router({
           ...(input.title !== undefined && { title: input.title }),
           ...(input.copy !== undefined && { copy: input.copy }),
           ...(input.hashtags !== undefined && { hashtags: input.hashtags }),
+          ...(input.purpose !== undefined && {
+            purpose: input.purpose?.trim() || null,
+          }),
           ...(input.referenceLink !== undefined && {
             referenceLink: input.referenceLink || null,
           }),

@@ -52,6 +52,7 @@ export default function EditPostEditorPage() {
     title: post.title ?? "",
     copy: post.copy ?? "",
     hashtags: post.hashtags ?? "",
+    purpose: post.purpose ?? "",
     scheduledAt: post.scheduledAt
       ? new Date(post.scheduledAt).toISOString().slice(0, 16)
       : "",
