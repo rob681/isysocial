@@ -111,9 +111,9 @@ enum PerformanceTier {
 }
 
 enum ContactRole {
-  APPROVER   // Puede aprobar / rechazar posts
-  REVIEWER   // Puede ver y comentar, pero no aprobar
-  OBSERVER   // Solo lectura
+  APPROVER // Puede aprobar / rechazar posts
+  REVIEWER // Puede ver y comentar, pero no aprobar
+  OBSERVER // Solo lectura
 
   @@schema("isysocial")
 }
@@ -177,8 +177,8 @@ model AgencySocialAccount {
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  publishLogs         PostPublishLog[]
-  clientNetworkLinks  ClientSocialNetwork[]
+  publishLogs        PostPublishLog[]
+  clientNetworkLinks ClientSocialNetwork[]
 
   @@unique([agencyId, network, accountId])
   @@index([agencyId])
@@ -227,24 +227,24 @@ model User {
   mfaEnabled Boolean @default(false)
   totpSecret String?
 
-  agencyId            String?
-  agency              Agency?  @relation(fields: [agencyId], references: [id])
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  agencyId  String?
+  agency    Agency?  @relation(fields: [agencyId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  clientProfile   ClientProfile?
-  clientContact   ClientContact?
-  editorProfile   EditorProfile?
-  notifications   Notification[]
-  tokens          Token[]
-  postComments    PostComment[]
-  ideaComments    IdeaComment[]
-  videoComments   VideoComment[]  @relation("VideoCommentAuthor")
-  postStatusLogs  PostStatusLog[]
-  postRevisions   PostRevision[]
-  ideas           Idea[]          @relation("UserIdeas")
-  publishLogs     PostPublishLog[]
-  mediaVersions   PostMediaVersion[]
+  clientProfile  ClientProfile?
+  clientContact  ClientContact?
+  editorProfile  EditorProfile?
+  notifications  Notification[]
+  tokens         Token[]
+  postComments   PostComment[]
+  ideaComments   IdeaComment[]
+  videoComments  VideoComment[]     @relation("VideoCommentAuthor")
+  postStatusLogs PostStatusLog[]
+  postRevisions  PostRevision[]
+  ideas          Idea[]             @relation("UserIdeas")
+  publishLogs    PostPublishLog[]
+  mediaVersions  PostMediaVersion[]
 
   @@map("iso_users")
   @@schema("isysocial")
@@ -266,15 +266,15 @@ model ClientProfile {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  socialNetworks         ClientSocialNetwork[]
-  editorAssignments      EditorClientAssignment[]
-  posts                  Post[]
-  ideas                  Idea[]
-  brandAssets            ClientBrandAsset[]
-  guidedReviewSessions   GuidedReviewSession[]
-  brandBrochureSessions  BrandBrochureSession[]
-  contacts               ClientContact[]
-  dayThemes              ClientDayTheme[]
+  socialNetworks        ClientSocialNetwork[]
+  editorAssignments     EditorClientAssignment[]
+  posts                 Post[]
+  ideas                 Idea[]
+  brandAssets           ClientBrandAsset[]
+  guidedReviewSessions  GuidedReviewSession[]
+  brandBrochureSessions BrandBrochureSession[]
+  contacts              ClientContact[]
+  dayThemes             ClientDayTheme[]
 
   @@index([agencyId])
   @@index([groupId])
@@ -288,9 +288,9 @@ model ClientDayTheme {
   id              String        @id @default(cuid())
   clientProfileId String
   clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  dayOfWeek       Int           // 0=Domingo, 1=Lunes, ..., 6=Sábado
-  theme           String        // e.g. "Sabías qué...?", "Lifestyle"
-  emoji           String?       // optional emoji for the theme
+  dayOfWeek       Int // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  theme           String // e.g. "Sabías qué...?", "Lifestyle"
+  emoji           String? // optional emoji for the theme
   isActive        Boolean       @default(true)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -309,13 +309,13 @@ model ClientContact {
   clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   // Cada contacto tiene su propio User para login independiente
-  userId          String        @unique
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role            ContactRole   @default(REVIEWER)
-  isActive        Boolean       @default(true)
-  invitedAt       DateTime      @default(now())
-  lastLoginAt     DateTime?
+  role        ContactRole @default(REVIEWER)
+  isActive    Boolean     @default(true)
+  invitedAt   DateTime    @default(now())
+  lastLoginAt DateTime?
 
   @@index([clientProfileId])
   @@map("iso_client_contacts")
@@ -354,14 +354,14 @@ model ClientSocialNetwork {
   clientId    String
   client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
   network     SocialNetwork
-  pageId      String?       // Platform page ID (FB page ID, IG business ID, etc.)
+  pageId      String? // Platform page ID (FB page ID, IG business ID, etc.)
   accountName String?
   profilePic  String?
   isActive    Boolean       @default(true)
   createdAt   DateTime      @default(now())
 
   // Source: Can be direct OAuth or inherited from agency
-  sourceType      String        @default("agency")  // "agency" or "direct"
+  sourceType      String               @default("agency") // "agency" or "direct"
   agencyAccountId String?
   agencyAccount   AgencySocialAccount? @relation(fields: [agencyAccountId], references: [id], onDelete: SetNull)
 
@@ -371,7 +371,7 @@ model ClientSocialNetwork {
   tokenExpiresAt DateTime?
   accountId      String? // Platform user/page ID needed for API calls
   tokenScope     String? // Granted OAuth scopes (comma-separated)
-  assignedAt     DateTime @default(now())
+  assignedAt     DateTime  @default(now())
 
   publishLogs PostPublishLog[]
 
@@ -421,24 +421,24 @@ model Post {
   referenceLink            String?
   storyData                Json?
   storyBatchId             String?
-  storySequence            Int?     @default(0)
+  storySequence            Int?    @default(0)
 
   categoryId    String?
   category      PostCategory? @relation(fields: [categoryId], references: [id])
   mirrorGroupId String?
 
   // Cross-app: Isytask integration (optional link to a Task)
-  isytaskTaskId String?   // ID of the linked Task in public schema
+  isytaskTaskId String? // ID of the linked Task in public schema
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  media              PostMedia[]
-  comments           PostComment[]
-  statusLogs         PostStatusLog[]
-  revisions          PostRevision[]
-  publishLogs        PostPublishLog[]
-  insights           PostInsights[]
+  media               PostMedia[]
+  comments            PostComment[]
+  statusLogs          PostStatusLog[]
+  revisions           PostRevision[]
+  publishLogs         PostPublishLog[]
+  insights            PostInsights[]
   guidedReviewSession GuidedReviewSession?
 
   @@index([agencyId, clientId])
@@ -452,18 +452,18 @@ model Post {
 }
 
 model PostMedia {
-  id          String   @id @default(cuid())
-  postId      String
-  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  fileName    String
-  fileUrl     String
-  storagePath String
-  mimeType    String
-  fileSize    Int
-  sortOrder   Int      @default(0)
-  thumbnailUrl String?  // URL to generated thumbnail (for videos)
-  duration     Float?   // Duration in seconds (for videos)
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  postId       String
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileUrl      String
+  storagePath  String
+  mimeType     String
+  fileSize     Int
+  sortOrder    Int      @default(0)
+  thumbnailUrl String? // URL to generated thumbnail (for videos)
+  duration     Float? // Duration in seconds (for videos)
+  createdAt    DateTime @default(now())
 
   versions PostMediaVersion[]
 
@@ -474,9 +474,9 @@ model PostMedia {
 // ─── POST MEDIA VERSIONS (Image history before/after) ────────────────────────
 
 model PostMediaVersion {
-  id          String    @id @default(cuid())
-  mediaId     String
-  media       PostMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  id      String    @id @default(cuid())
+  mediaId String
+  media   PostMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 
   versionNumber Int
   fileUrl       String
@@ -486,7 +486,7 @@ model PostMediaVersion {
 
   // Attribution
   changedById String
-  changedBy   User   @relation(fields: [changedById], references: [id])
+  changedBy   User    @relation(fields: [changedById], references: [id])
   changeNotes String? // "Aumentar contraste", "Ajustar saturación"
 
   // Link to the comment that requested changes
@@ -552,22 +552,22 @@ model PostRevision {
 }
 
 model PostPublishLog {
-  id             String              @id @default(cuid())
-  postId         String
-  post           Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
-  networkId      String?
-  socialNetwork  ClientSocialNetwork? @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  id              String               @id @default(cuid())
+  postId          String
+  post            Post                 @relation(fields: [postId], references: [id], onDelete: Cascade)
+  networkId       String?
+  socialNetwork   ClientSocialNetwork? @relation(fields: [networkId], references: [id], onDelete: Cascade)
   agencyAccountId String?
   agencyAccount   AgencySocialAccount? @relation(fields: [agencyAccountId], references: [id], onDelete: Cascade)
-  network        SocialNetwork
-  platformPostId String? // ID returned by the platform (FB post ID, tweet ID, etc.)
-  platformUrl    String? // URL to the published post on the platform
-  status         PublishStatus       @default(PENDING)
-  errorMessage   String?
-  requestedById  String
-  requestedBy    User                @relation(fields: [requestedById], references: [id])
-  attemptedAt    DateTime            @default(now())
-  publishedAt    DateTime?
+  network         SocialNetwork
+  platformPostId  String? // ID returned by the platform (FB post ID, tweet ID, etc.)
+  platformUrl     String? // URL to the published post on the platform
+  status          PublishStatus        @default(PENDING)
+  errorMessage    String?
+  requestedById   String
+  requestedBy     User                 @relation(fields: [requestedById], references: [id])
+  attemptedAt     DateTime             @default(now())
+  publishedAt     DateTime?
 
   @@index([postId])
   @@map("iso_post_publish_logs")
@@ -629,19 +629,19 @@ model PostInsights {
 // ─── GUIDED REVIEW SESSIONS ──────────────────────────────────────────────────
 
 model GuidedReviewSession {
-  id        String @id @default(cuid())
-  postId    String @unique
-  post      Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  postId String @unique
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
 
-  clientId  String
-  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  client   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   requestedAt DateTime  @default(now())
   scheduledAt DateTime?
   completedAt DateTime?
 
-  status      String    @default("PENDING") // PENDING, SCHEDULED, COMPLETED, CANCELLED
-  notes       String?   @db.Text
+  status String  @default("PENDING") // PENDING, SCHEDULED, COMPLETED, CANCELLED
+  notes  String? @db.Text
 
   createdBy   String
   confirmedBy String?
@@ -668,12 +668,12 @@ model Idea {
   description     String?
   copyIdeas       String?
   network         SocialNetwork?
-  networks        SocialNetwork[]  @default([])
+  networks        SocialNetwork[] @default([])
   postType        PostType?
   tentativeDate   DateTime?
-  status          IdeaStatus     @default(BACKLOG)
+  status          IdeaStatus      @default(BACKLOG)
   convertedPostId String?
-  isClientIdea    Boolean        @default(false)
+  isClientIdea    Boolean         @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -848,23 +848,23 @@ model Token {
 // ─── BRAND BROCHURE (Guided AI questionnaire) ──────────────────────────────────
 
 model BrandBrochureSession {
-  id        String @id @default(cuid())
-  clientId  String
-  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id       String        @id @default(cuid())
+  clientId String
+  client   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  status      String  @default("INITIAL")  // INITIAL, IN_PROGRESS, COMPLETED, ABANDONED
-  currentStep Int     @default(1)
+  status      String @default("INITIAL") // INITIAL, IN_PROGRESS, COMPLETED, ABANDONED
+  currentStep Int    @default(1)
 
   // Responses from client
-  responses Json @default("{}")  // { questionId: answer }
+  responses Json @default("{}") // { questionId: answer }
 
   // Generated fields by AI
-  generatedFieldSchema Json?  // { fields: [...], metadata: {...} }
+  generatedFieldSchema Json? // { fields: [...], metadata: {...} }
 
   // Final brand kit merge
   finalBrandKit Json?
 
-  initiatedAt DateTime @default(now())
+  initiatedAt DateTime  @default(now())
   completedAt DateTime?
 
   questions BrandBrochureQuestion[]
@@ -878,21 +878,21 @@ model BrandBrochureSession {
 }
 
 model BrandBrochureQuestion {
-  id        String @id @default(cuid())
+  id        String               @id @default(cuid())
   sessionId String
   session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  stepNumber  Int
-  questionId  String         // "company_desc", "industry", "target_audience", etc.
-  question    String
-  inputType   String         @default("textarea")  // textarea, text, select, multi-select, color, file
-  hint        String?
-  required    Boolean        @default(true)
+  stepNumber Int
+  questionId String // "company_desc", "industry", "target_audience", etc.
+  question   String
+  inputType  String  @default("textarea") // textarea, text, select, multi-select, color, file
+  hint       String?
+  required   Boolean @default(true)
 
   response     String?
-  responseJson Json?          // For complex inputs (files, multiple values)
+  responseJson Json? // For complex inputs (files, multiple values)
 
-  aiGenerated Boolean @default(false)
+  aiGenerated Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   @@unique([sessionId, questionId])
@@ -902,19 +902,19 @@ model BrandBrochureQuestion {
 }
 
 model BrandBrochureField {
-  id        String @id @default(cuid())
+  id        String               @id @default(cuid())
   sessionId String
   session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  fieldId   String       // "missionStatement", "brandColors", "targetAudience", etc.
-  label     String
-  category  String       // "communication", "identity", "strategy", "assets"
+  fieldId  String // "missionStatement", "brandColors", "targetAudience", etc.
+  label    String
+  category String // "communication", "identity", "strategy", "assets"
 
-  suggestedValue String?  // AI-generated suggestion
-  clientValue    String?  // Client's edited/approved value
-  confidence     Float?   // AI confidence score (0-1)
+  suggestedValue String? // AI-generated suggestion
+  clientValue    String? // Client's edited/approved value
+  confidence     Float? // AI confidence score (0-1)
 
-  relatedQuestions String[]  // Which questions informed this field
+  relatedQuestions String[] // Which questions informed this field
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -926,7 +926,7 @@ model BrandBrochureField {
 }
 
 model BrandBrochureUpload {
-  id        String @id @default(cuid())
+  id        String               @id @default(cuid())
   sessionId String
   session   BrandBrochureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -934,10 +934,10 @@ model BrandBrochureUpload {
   fileUrl          String
   storagePath      String
   mimeType         String
-  fileSize         Int              @default(0)
-  extractedText    String?          // Raw text from extraction
-  extractionMethod String           @default("manual") // "ocr_vision" | "pdf_parse" | "manual"
-  confidence       Float?           // Extraction confidence 0-1
+  fileSize         Int     @default(0)
+  extractedText    String? // Raw text from extraction
+  extractionMethod String  @default("manual") // "ocr_vision" | "pdf_parse" | "manual"
+  confidence       Float? // Extraction confidence 0-1
 
   uploadedAt DateTime @default(now())
 
@@ -948,25 +948,25 @@ model BrandBrochureUpload {
 
 // ─── VIDEO COMMENTS (Timeline feedback on videos) ──────────────────────────
 model VideoComment {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Polymorphic relationship: links to either PostMedia or TaskFile
-  mediaType       String   // "POST_MEDIA" | "TASK_FILE"
-  mediaId         String   // Foreign key (flexible: can reference PostMedia.id or TaskFile.id)
+  mediaType String // "POST_MEDIA" | "TASK_FILE"
+  mediaId   String // Foreign key (flexible: can reference PostMedia.id or TaskFile.id)
 
   // Comment data
-  authorId        String
-  author          User     @relation("VideoCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  content         String
+  authorId String
+  author   User   @relation("VideoCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content  String
 
   // CRITICAL: Timestamp field for video timeline feedback
-  timecodeSeconds Float?   // Seconds into video (e.g., 15.5 = 15.5 seconds)
+  timecodeSeconds Float? // Seconds into video (e.g., 15.5 = 15.5 seconds)
 
   // Metadata
-  isInternal      Boolean  @default(false)
-  isResolved      Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isInternal Boolean  @default(false)
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([mediaId, timecodeSeconds])
   @@map("iso_video_comments")
@@ -989,10 +989,10 @@ model SystemConfig {
 model RealtimeEvent {
   id        String   @id @default(cuid())
   agencyId  String
-  type      String   // POST_CREATED | POST_UPDATED | POST_STATUS_CHANGED | COMMENT_ADDED | POST_PUBLISHED | CALENDAR_UPDATED | IDEA_UPDATED
-  postId    String?  // target post (for targeted invalidation)
-  clientId  String?  // target client
-  payload   Json?    // extra context if needed
+  type      String // POST_CREATED | POST_UPDATED | POST_STATUS_CHANGED | COMMENT_ADDED | POST_PUBLISHED | CALENDAR_UPDATED | IDEA_UPDATED
+  postId    String? // target post (for targeted invalidation)
+  clientId  String? // target client
+  payload   Json? // extra context if needed
   createdAt DateTime @default(now())
 
   @@index([agencyId, createdAt])
