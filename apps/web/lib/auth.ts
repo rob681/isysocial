@@ -3,6 +3,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { db } from "@isysocial/db";
 
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -36,6 +39,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Credenciales inválidas");
         }
 
+        // Check account lockout
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+          const minutesLeft = Math.ceil(
+            (user.lockedUntil.getTime() - Date.now()) / 60000
+          );
+          throw new Error(
+            `Cuenta bloqueada por demasiados intentos fallidos. Intenta de nuevo en ${minutesLeft} minuto${minutesLeft !== 1 ? "s" : ""}.`
+          );
+        }
+
         // Si es un ClientContact, verificar que el contacto esté activo
         if (user.clientContact && !user.clientContact.isActive) {
           throw new Error("Tu acceso ha sido desactivado. Contacta al administrador.");
@@ -63,7 +76,31 @@ export const authOptions: NextAuthOptions = {
 
         const isValid = await compare(credentials.password, user.passwordHash);
         if (!isValid) {
+          const newAttempts = (user.loginAttempts ?? 0) + 1;
+          const shouldLock = newAttempts >= MAX_LOGIN_ATTEMPTS;
+          await db.user.update({
+            where: { id: user.id },
+            data: {
+              loginAttempts: newAttempts,
+              lockedUntil: shouldLock
+                ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000)
+                : undefined,
+            },
+          });
+          if (shouldLock) {
+            throw new Error(
+              `Cuenta bloqueada por ${MAX_LOGIN_ATTEMPTS} intentos fallidos. Intenta de nuevo en ${LOCKOUT_MINUTES} minutos.`
+            );
+          }
           throw new Error("Credenciales inválidas");
+        }
+
+        // Reset lockout on successful login
+        if ((user.loginAttempts ?? 0) > 0 || user.lockedUntil) {
+          await db.user.update({
+            where: { id: user.id },
+            data: { loginAttempts: 0, lockedUntil: null },
+          });
         }
 
         // ClientContacts no tienen clientProfile propio — usan el del cliente al que están vinculados

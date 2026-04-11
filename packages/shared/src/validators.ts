@@ -2,15 +2,30 @@ import { z } from "zod";
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Strong password policy:
+ * - Minimum 8 characters
+ * - At least one uppercase letter
+ * - At least one number
+ * - At least one special character
+ */
+const strongPassword = z
+  .string()
+  .min(8, "Mínimo 8 caracteres")
+  .regex(/[A-Z]/, "Debe contener al menos una letra mayúscula")
+  .regex(/[0-9]/, "Debe contener al menos un número")
+  .regex(/[^A-Za-z0-9]/, "Debe contener al menos un carácter especial (!@#$%...)");
+
 export const loginSchema = z.object({
   email: z.string().email("Email inválido"),
+  // Login keeps permissive check — validation happens on bcrypt compare
   password: z.string().min(1, "Contraseña requerida"),
 });
 
 export const setupPasswordSchema = z
   .object({
     token: z.string().min(1),
-    password: z.string().min(8, "Mínimo 8 caracteres"),
+    password: strongPassword,
     confirmPassword: z.string().min(1),
   })
   .refine((d) => d.password === d.confirmPassword, {
@@ -25,7 +40,7 @@ export const resetPasswordRequestSchema = z.object({
 export const resetPasswordSchema = z
   .object({
     token: z.string().min(1),
-    password: z.string().min(8, "Mínimo 8 caracteres"),
+    password: strongPassword,
     confirmPassword: z.string().min(1),
   })
   .refine((d) => d.password === d.confirmPassword, {
@@ -39,7 +54,7 @@ export const registerAgencySchema = z.object({
   agencyName: z.string().min(2, "Mínimo 2 caracteres"),
   adminName: z.string().min(2),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: strongPassword,
 });
 
 // ─── Client ───────────────────────────────────────────────────────────────────

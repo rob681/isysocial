@@ -205,6 +205,15 @@ model User {
   isActive            Boolean  @default(true)
   onboardingCompleted Boolean  @default(false)
   fcmTokens           String[] @default([])
+
+  // Account lockout
+  loginAttempts Int       @default(0)
+  lockedUntil   DateTime?
+
+  // MFA / TOTP
+  mfaEnabled Boolean @default(false)
+  totpSecret String?
+
   agencyId            String?
   agency              Agency?  @relation(fields: [agencyId], references: [id])
   createdAt           DateTime @default(now())
@@ -908,5 +917,28 @@ model RealtimeEvent {
 
   @@index([agencyId, createdAt])
   @@map("iso_realtime_events")
+  @@schema("isysocial")
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  agencyId   String?
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("iso_audit_logs")
   @@schema("isysocial")
 }
