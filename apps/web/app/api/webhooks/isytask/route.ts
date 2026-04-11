@@ -5,15 +5,15 @@
  * Events are written to shared.cross_app_events for reliable delivery.
  *
  * Event types handled:
- *   TASK_IN_REVISION    → Update linked post status
- *   TASK_FINALIZADA     → Mark linked post as approved/ready
- *   TASK_CANCELADA      → Cancel linked post
+ *   TASK_IN_REVISION       → Update linked post status to IN_REVIEW
+ *   TASK_FINALIZADA        → Auto-publish or schedule linked post
+ *   TASK_CANCELADA         → Cancel linked post
  *   TASK_CREATED_WITH_POST → Create draft post from task
  */
 
 import { NextResponse } from "next/server";
 import { db } from "@isysocial/db";
-import { queueEvent, getOrganizationByAgencyId } from "@isysocial/api";
+import { queueEvent, getOrganizationByAgencyId, publishToNetwork } from "@isysocial/api";
 
 const CROSS_APP_SECRET = process.env.CROSS_APP_SECRET;
 
@@ -61,7 +61,6 @@ export async function POST(req: Request) {
       : null;
 
     if (!org && agencyName) {
-      // Fallback: try to find org by name match via Isysocial agency
       const isoAgency = await db.agency.findFirst({
         where: { name: { equals: agencyName, mode: "insensitive" } },
         select: { id: true },
@@ -73,7 +72,6 @@ export async function POST(req: Request) {
 
     if (!org) {
       console.warn(`[Webhook:Isytask] No organization found for agency ${agencyId || agencyName}`);
-      // Accept the webhook but log it — don't fail
       return NextResponse.json(
         { received: true, warning: "Organization not found, event skipped" },
         { status: 202 }
@@ -111,9 +109,7 @@ export async function POST(req: Request) {
   }
 }
 
-/**
- * GET for health check
- */
+/** GET for health check */
 export async function GET() {
   return NextResponse.json({
     status: "ok",
@@ -154,7 +150,6 @@ async function processEventImmediately(eventId: string) {
         console.log(`[Webhook:Isytask] Unknown event type: ${event_type}`);
     }
 
-    // Mark as done
     await db.$queryRawUnsafe(
       `UPDATE shared.cross_app_events SET status = 'DONE', processed_at = now() WHERE id = $1`,
       eventId
@@ -179,7 +174,6 @@ async function handleTaskInRevision(payload: any) {
   const { postId } = payload;
   if (!postId) return;
 
-  // Move post back to IN_REVIEW if it was in CLIENT_CHANGES
   const post = await db.post.findUnique({
     where: { id: postId },
     select: { id: true, status: true },
@@ -203,31 +197,226 @@ async function handleTaskInRevision(payload: any) {
   }
 }
 
+/**
+ * TASK_FINALIZADA → auto-publish or schedule the linked Isysocial post.
+ *
+ * Logic:
+ *  1. Load post with network credentials (client or agency OAuth account)
+ *  2. If post has scheduledAt in the future → move to SCHEDULED (cron publishes it)
+ *  3. If no scheduledAt or in the past + credentials available → publish now
+ *  4. If no credentials → mark APPROVED + log (admin publishes manually)
+ */
 async function handleTaskFinalized(payload: any) {
   const { postId } = payload;
   if (!postId) return;
 
   const post = await db.post.findUnique({
     where: { id: postId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      agencyId: true,
+      clientId: true,
+      network: true,
+      postType: true,
+      copy: true,
+      hashtags: true,
+      scheduledAt: true,
+      client: {
+        select: {
+          socialNetworks: {
+            where: { isActive: true, accessToken: { not: null } },
+            select: {
+              id: true,
+              network: true,
+              accessToken: true,
+              accountId: true,
+              pageId: true,
+            },
+          },
+        },
+      },
+    },
   });
 
-  if (post && !["PUBLISHED", "CANCELLED"].includes(post.status)) {
+  if (!post || ["PUBLISHED", "CANCELLED"].includes(post.status)) return;
+
+  // Find media for the post
+  const media = await db.postMedia.findMany({
+    where: { postId: post.id },
+    orderBy: { sortOrder: "asc" },
+    select: { fileUrl: true },
+  });
+
+  // Find OAuth account: client's first, fall back to agency's
+  const clientAccount = post.client?.socialNetworks?.find(
+    (sn: any) => sn.network === post.network && sn.accessToken
+  );
+
+  const agencyAccount = !clientAccount
+    ? await db.agencySocialAccount.findFirst({
+        where: {
+          agencyId: post.agencyId,
+          network: post.network,
+          isActive: true,
+          accessToken: { not: "" },
+        },
+        select: { id: true, network: true, accessToken: true, accountId: true, pageId: true },
+      })
+    : null;
+
+  const account = clientAccount ?? agencyAccount;
+
+  const now = new Date();
+  const hasSchedule = post.scheduledAt && post.scheduledAt > now;
+
+  // ── Case 1: Future scheduledAt → move to SCHEDULED ───────────────────────
+  if (hasSchedule) {
     await db.post.update({
-      where: { id: postId },
-      data: { status: "APPROVED" },
+      where: { id: post.id },
+      data: { status: "SCHEDULED" },
     });
 
     await db.postStatusLog.create({
       data: {
-        postId,
+        postId: post.id,
         fromStatus: post.status,
-        toStatus: "APPROVED",
+        toStatus: "SCHEDULED",
         changedById: "system",
-        note: "[Isytask] Tarea finalizada — post aprobado automáticamente",
+        note: `[Isytask] Tarea finalizada — publicación programada para ${post.scheduledAt!.toISOString()}`,
       },
     });
+
+    console.log(`[TASK_FINALIZADA] Post ${post.id} scheduled for ${post.scheduledAt}`);
+    return;
   }
+
+  // ── Case 2: No schedule + credentials → publish now ───────────────────────
+  if (account?.accessToken) {
+    // Find agency admin user for log attribution
+    const agencyAdmin = await db.user.findFirst({
+      where: { agencyId: post.agencyId, role: "ADMIN" },
+      select: { id: true },
+    });
+
+    const log = await db.postPublishLog.create({
+      data: {
+        postId: post.id,
+        ...(clientAccount
+          ? { networkId: clientAccount.id }
+          : { agencyAccountId: agencyAccount!.id }),
+        network: post.network,
+        status: "PENDING",
+        requestedById: agencyAdmin?.id ?? "system",
+      },
+    });
+
+    try {
+      const result = await publishToNetwork({
+        network: post.network,
+        copy: post.copy ?? "",
+        hashtags: post.hashtags ?? "",
+        mediaUrls: media.map((m: any) => m.fileUrl),
+        postType: post.postType,
+        accountId: account.accountId ?? "",
+        accessToken: account.accessToken!,
+        pageId: account.pageId ?? undefined,
+      });
+
+      await db.postPublishLog.update({
+        where: { id: log.id },
+        data: {
+          status: result.success ? "SUCCESS" : "FAILED",
+          platformPostId: result.platformPostId ?? null,
+          platformUrl: result.platformUrl ?? null,
+          errorMessage: result.error ?? null,
+          publishedAt: result.success ? now : null,
+        },
+      });
+
+      if (result.success) {
+        await db.post.update({
+          where: { id: post.id },
+          data: { status: "PUBLISHED", publishedAt: now },
+        });
+
+        await db.postStatusLog.create({
+          data: {
+            postId: post.id,
+            fromStatus: post.status,
+            toStatus: "PUBLISHED",
+            changedById: "system",
+            note: "[Isytask] Tarea finalizada — publicado automáticamente",
+          },
+        });
+
+        console.log(`[TASK_FINALIZADA] Post ${post.id} published successfully`);
+      } else {
+        // Publish failed → fall through to APPROVED so admin can retry manually
+        await db.post.update({
+          where: { id: post.id },
+          data: { status: "APPROVED" },
+        });
+
+        await db.postStatusLog.create({
+          data: {
+            postId: post.id,
+            fromStatus: post.status,
+            toStatus: "APPROVED",
+            changedById: "system",
+            note: `[Isytask] Tarea finalizada — publicación automática falló: ${result.error ?? "error desconocido"}`,
+          },
+        });
+
+        console.error(`[TASK_FINALIZADA] Auto-publish failed for post ${post.id}:`, result.error);
+      }
+    } catch (err) {
+      console.error(`[TASK_FINALIZADA] Exception publishing post ${post.id}:`, err);
+
+      await db.postPublishLog.update({
+        where: { id: log.id },
+        data: {
+          status: "FAILED",
+          errorMessage: err instanceof Error ? err.message : String(err),
+        },
+      });
+
+      // Fall back to APPROVED
+      await db.post.update({
+        where: { id: post.id },
+        data: { status: "APPROVED" },
+      });
+
+      await db.postStatusLog.create({
+        data: {
+          postId: post.id,
+          fromStatus: post.status,
+          toStatus: "APPROVED",
+          changedById: "system",
+          note: "[Isytask] Tarea finalizada — error al publicar automáticamente, requiere publicación manual",
+        },
+      });
+    }
+    return;
+  }
+
+  // ── Case 3: No credentials → approve for manual publish ───────────────────
+  await db.post.update({
+    where: { id: post.id },
+    data: { status: "APPROVED" },
+  });
+
+  await db.postStatusLog.create({
+    data: {
+      postId: post.id,
+      fromStatus: post.status,
+      toStatus: "APPROVED",
+      changedById: "system",
+      note: "[Isytask] Tarea finalizada — sin credenciales de red social, requiere publicación manual",
+    },
+  });
+
+  console.log(`[TASK_FINALIZADA] Post ${post.id} approved (no credentials for auto-publish)`);
 }
 
 async function handleTaskCanceled(payload: any) {
@@ -261,8 +450,6 @@ async function handleTaskCreatedWithPost(payload: any) {
   const { clientId, taskTitle, taskDescription } = payload;
   if (!clientId) return;
 
-  // Find Isysocial client by matching email or name
-  // For now, log the event. Full implementation would create a draft post.
   console.log(
     `[Webhook:Isytask] Task created with post request for client ${clientId}:`,
     taskTitle
