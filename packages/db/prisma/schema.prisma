@@ -398,6 +398,10 @@ model Post {
   network  SocialNetwork
   postType PostType
 
+  // Optional context provided at creation — feeds future agent memory.
+  // Surfaced via "Agregar contexto" toggle, never required.
+  purpose String? @db.Text
+
   status      PostStatus @default(DRAFT)
   scheduledAt DateTime?
   publishedAt DateTime?
