@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Clear OAuth tokens but keep the record
+  // Clear OAuth tokens but keep the record (preserve profilePic for display)
   const updated = await db.clientSocialNetwork.updateMany({
     where: { clientId, network: network as any },
     data: {
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       accountId: null,
       pageId: null,
       accountName: null,
-      profilePic: null,
+      // profilePic intentionally preserved so the client avatar remains visible
       isActive: false,
     },
   });

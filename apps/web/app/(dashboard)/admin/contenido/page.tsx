@@ -41,6 +41,7 @@ import {
   Loader2,
   Download,
   Film,
+  Users,
 } from "lucide-react";
 import {
   NETWORK_LABELS,
@@ -175,11 +176,37 @@ function BulkActionBar({
   );
 }
 
+/* ─── No client selected ─────────────────────────────────────────── */
+function NoClientSelected() {
+  return (
+    <div className="flex flex-col flex-1">
+      <Topbar title="Contenido" />
+      <main className="flex-1 p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <Users className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Selecciona un cliente</h2>
+          <p className="text-muted-foreground text-sm">
+            Elige un cliente desde la barra lateral para ver y gestionar su contenido.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────── */
 function ContenidoPageInner() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get("clientId") ?? undefined;
 
+  if (!clientId) return <NoClientSelected />;
+
+  return <ContenidoWithClient clientId={clientId} />;
+}
+
+function ContenidoWithClient({ clientId }: { clientId: string }) {
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");

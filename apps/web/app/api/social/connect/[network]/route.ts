@@ -21,13 +21,13 @@ const oauthConfig: Record<
     // the correct scope is instagram_manage_insights (Graph API permission name differs).
     // Analytics access is granted via the page access token once pages_read_engagement is approved.
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   linkedin: {

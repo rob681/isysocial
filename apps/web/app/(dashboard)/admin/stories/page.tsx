@@ -9,19 +9,44 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Film, Calendar, Loader2, FileImage } from "lucide-react";
+import { Plus, Search, Film, Calendar, Loader2, FileImage, Users } from "lucide-react";
 import { NETWORK_LABELS, NETWORK_COLORS, POST_STATUS_LABELS, POST_STATUS_COLORS } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus } from "@isysocial/shared";
 import { Topbar } from "@/components/layout/topbar";
+
+function NoClientSelected() {
+  return (
+    <div className="flex flex-col h-full">
+      <Topbar title="Isystory Studio" />
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <Users className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Selecciona un cliente</h2>
+          <p className="text-muted-foreground text-sm">
+            Elige un cliente desde la barra lateral para ver y gestionar sus historias.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StoriesPageInner() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get("clientId") ?? undefined;
 
+  if (!clientId) return <NoClientSelected />;
+
+  return <StoriesWithClient clientId={clientId} />;
+}
+
+function StoriesWithClient({ clientId }: { clientId: string }) {
   const [search, setSearch] = useState("");
   const router = useRouter();
 
-  const postsQuery = trpc.posts.list.useQuery({ limit: 100, clientId });
+  const postsQuery = trpc.posts.list.useQuery({ limit: 100, clientId: clientId });
 
   // Filter stories on client side
   const allPosts = postsQuery.data?.posts ?? [];

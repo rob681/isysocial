@@ -3,6 +3,22 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
+import { uploadFile } from "@isysocial/api/src/lib/supabase-storage";
+
+async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
+  try {
+    const res = await fetch(remoteUrl);
+    if (!res.ok) return remoteUrl;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
+    const path = `client-logos/${clientId}/${network}.${ext}`;
+    const { url } = await uploadFile("isysocial-media", path, buffer, contentType);
+    return url;
+  } catch {
+    return remoteUrl;
+  }
+}
 
 const networkEnumMap: Record<string, string> = {
   facebook: "FACEBOOK",
@@ -124,6 +140,17 @@ export async function POST(req: NextRequest) {
         ? "LINKEDIN"
         : selectedPage.id;
 
+    // Remove any previous direct-OAuth entries for this client+network that don't have an
+    // agencyAccountId — they were from a previous selection and should be replaced.
+    await db.clientSocialNetwork.deleteMany({
+      where: {
+        clientId,
+        network: networkEnum as any,
+        agencyAccountId: null,
+        NOT: { pageId: pageIdForNetwork },
+      },
+    });
+
     await db.clientSocialNetwork.upsert({
       where: {
         clientId_network_pageId: {
@@ -158,14 +185,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Update client logo if not already set
+    // Cache profile pic in Supabase Storage + update client logo
     if (profilePic) {
+      const cachedPic = await cacheProfilePic(profilePic, clientId, network);
+      // Update the stored profilePic with the permanent Supabase URL
+      await db.clientSocialNetwork.updateMany({
+        where: { clientId, network: networkEnum as any },
+        data: { profilePic: cachedPic },
+      });
       await db.clientProfile.updateMany({
-        where: {
-          id: clientId,
-          OR: [{ logoUrl: null }, { logoUrl: "" }],
-        },
-        data: { logoUrl: profilePic },
+        where: { id: clientId },
+        data: { logoUrl: cachedPic },
       });
     }
 

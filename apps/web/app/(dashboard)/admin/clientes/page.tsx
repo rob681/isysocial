@@ -479,13 +479,16 @@ function EditClientDialog({
 function ClientCard({
   client,
   onEdit,
+  onDeactivate,
 }: {
   client: any;
   onEdit: (client: any) => void;
+  onDeactivate: (clientId: string, clientName: string) => void;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const hasPassword = !!client.user?.passwordHash;
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const inviteMutation = trpc.clients.invite.useMutation({
     onSuccess: () => toast({
@@ -564,6 +567,16 @@ function ClientCard({
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDelete(true);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors"
+                  title="Dar de baja cliente"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
 
@@ -595,6 +608,32 @@ function ClientCard({
             </div>
           </div>
         </div>
+
+        {/* Delete confirmation inline */}
+        {confirmDelete && (
+          <div
+            className="mt-3 pt-3 border-t border-rose-100 dark:border-rose-900/40"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xs font-medium text-rose-700 dark:text-rose-400 mb-2">
+              ¿Dar de baja a <strong>{client.companyName}</strong>? El cliente ya no podrá acceder al sistema.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setConfirmDelete(false); onDeactivate(client.id, client.companyName); }}
+                className="px-3 py-1 text-xs font-medium bg-rose-600 hover:bg-rose-700 text-white rounded-md transition-colors"
+              >
+                Sí, dar de baja
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-3 py-1 text-xs font-medium border rounded-md hover:bg-accent transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -919,11 +958,21 @@ export default function ClientesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<any>(null);
   const utils = trpc.useUtils();
+  const { toast } = useToast();
 
   const { data, isLoading, isError } = trpc.clients.list.useQuery({
     search: debouncedSearch,
     page: 1,
     limit: 50,
+  });
+
+  const deactivateMutation = trpc.clients.deactivate.useMutation({
+    onSuccess: (_, variables) => {
+      utils.clients.list.invalidate();
+      utils.clients.getForSidebar.invalidate();
+      toast({ title: "Cliente dado de baja", description: "El cliente ya no tiene acceso al sistema." });
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const handleSearch = (value: string) => {
@@ -1009,7 +1058,12 @@ export default function ClientesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {data!.clients.map((client) => (
-              <ClientCard key={client.id} client={client} onEdit={setEditClient} />
+              <ClientCard
+                key={client.id}
+                client={client}
+                onEdit={setEditClient}
+                onDeactivate={(id) => deactivateMutation.mutate({ id })}
+              />
             ))}
           </div>
         )}

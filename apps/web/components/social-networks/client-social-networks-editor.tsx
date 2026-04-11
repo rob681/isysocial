@@ -17,6 +17,10 @@ import {
   Send,
   Globe,
   CalendarDays,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { NetworkAssignmentModal } from "./network-assignment-modal";
 
@@ -230,58 +234,75 @@ interface PageCardProps {
 
 function PageCard({ page, network, color, clientId, postCounts, lastPublishedAt, onRemoved }: PageCardProps) {
   const { toast } = useToast();
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [displayPic, setDisplayPic] = useState<string | null>(null);
 
-  // We reuse assignNetworksToClient with empty pageIds to unlink,
-  // or use a dedicated removePage mutation if available.
-  // For now we call assignNetworksToClient with the page removed.
-  // If there's a removePage mutation it would be preferable.
   const removeMutation = trpc.clients.assignNetworksToClient.useMutation({
     onSuccess: () => {
       toast({ title: "Página desvinculada" });
       onRemoved();
     },
     onError: (err) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const refreshMutation = trpc.clients.refreshClientPageInfo.useMutation({
+    onSuccess: (data) => {
+      setTokenValid(data.tokenValid);
+      if (data.accountName) setDisplayName(data.accountName);
+      if (data.profilePic) setDisplayPic(data.profilePic);
       toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-      }),
+        title: data.tokenValid ? "Token activo ✓" : "Token expirado",
+        description: data.tokenValid
+          ? `Información actualizada: ${data.accountName}`
+          : "El token ha expirado. Reconecta la cuenta.",
+        variant: data.tokenValid ? "default" : "destructive",
+      });
+    },
+    onError: (err) =>
+      toast({ title: "Error al actualizar", description: err.message, variant: "destructive" }),
   });
 
   const handleRemove = () => {
-    // Assign with empty array effectively unlinks
-    removeMutation.mutate({
-      clientId,
-      assignments: [{ network, pageIds: [] }],
-    });
+    removeMutation.mutate({ clientId, assignments: [{ network, pageIds: [] }] });
   };
+
+  const handleRefresh = () => {
+    if (!page.pageId) return;
+    refreshMutation.mutate({ clientId, network, pageId: page.pageId });
+  };
+
+  // External link per network
+  const externalUrl =
+    network === "FACEBOOK" ? `https://facebook.com/${page.pageId ?? ""}` :
+    network === "INSTAGRAM" ? `https://instagram.com/${(displayName ?? page.accountName ?? "").replace(/^@/, "")}` :
+    network === "LINKEDIN" ? `https://linkedin.com` : null;
+
+  const name = displayName ?? page.accountName;
+  const pic = displayPic ?? page.profilePic;
+  const isActive = tokenValid ?? page.isActive;
 
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors">
       <Avatar className="h-9 w-9 shrink-0">
-        {page.profilePic ? (
-          <AvatarImage src={page.profilePic} alt={page.accountName ?? undefined} />
-        ) : null}
-        <AvatarFallback
-          className="text-xs"
-          style={{
-            backgroundColor: color + "20",
-            color,
-          }}
-        >
-          {(page.accountName || "??").slice(0, 2).toUpperCase()}
+        {pic ? <AvatarImage src={pic} alt={name ?? undefined} /> : null}
+        <AvatarFallback className="text-xs" style={{ backgroundColor: color + "20", color }}>
+          {(name || "??").slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <p className="text-sm font-medium truncate">{page.accountName || "Sin nombre"}</p>
-          <Badge
-            variant={page.isActive ? "default" : "secondary"}
-            className="text-[10px] shrink-0"
-          >
-            {page.isActive ? "Activa" : "Inactiva"}
+          <p className="text-sm font-medium truncate">{name || "Sin nombre"}</p>
+          <Badge variant={isActive ? "default" : "secondary"} className="text-[10px] shrink-0">
+            {isActive ? "Activa" : "Inactiva"}
           </Badge>
+          {tokenValid !== null && (
+            tokenValid
+              ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+              : <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -306,25 +327,41 @@ function PageCard({ page, network, color, clientId, postCounts, lastPublishedAt,
           {lastPublishedAt && (
             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
               <CalendarDays className="h-3 w-3" />
-              {new Date(lastPublishedAt).toLocaleDateString("es", {
-                day: "numeric",
-                month: "short",
-              })}
+              {new Date(lastPublishedAt).toLocaleDateString("es", { day: "numeric", month: "short" })}
             </span>
           )}
         </div>
       </div>
 
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-        onClick={handleRemove}
-        disabled={removeMutation.isPending}
-        title="Desvincular página"
-      >
-        <Unlink className="h-4 w-4" />
-      </Button>
+      <div className="flex items-center gap-1 shrink-0">
+        {externalUrl && (
+          <a href={externalUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" title="Ver en red social">
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </a>
+        )}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 text-muted-foreground hover:text-primary"
+          onClick={handleRefresh}
+          disabled={refreshMutation.isPending}
+          title="Actualizar info y verificar token"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={handleRemove}
+          disabled={removeMutation.isPending}
+          title="Desvincular página"
+        >
+          <Unlink className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

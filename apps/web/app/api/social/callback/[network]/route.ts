@@ -4,8 +4,29 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
+import { uploadFile } from "@isysocial/api/src/lib/supabase-storage";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
+
+/**
+ * Downloads a profile picture from a remote URL and caches it in Supabase Storage.
+ * Returns the permanent Supabase URL, or the original URL if caching fails.
+ */
+async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
+  try {
+    const res = await fetch(remoteUrl);
+    if (!res.ok) return remoteUrl;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
+    const path = `client-logos/${clientId}/${network}.${ext}`;
+    const { url } = await uploadFile("isysocial-media", path, buffer, contentType);
+    return url;
+  } catch (err) {
+    console.warn("[cacheProfilePic] Failed to cache, using original URL:", err);
+    return remoteUrl;
+  }
+}
 
 const REDIRECT_BASE = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim();
 
@@ -226,51 +247,77 @@ export async function GET(
       // to fetch page tokens there for pages without.
       let nextUrl: string | null =
         `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,picture,access_token&limit=100&access_token=${accessToken}`;
+      let personalPageCount = 0;
       while (nextUrl) {
         // eslint-disable-next-line no-await-in-loop
         const fbPagesFetch: Response = await fetch(nextUrl);
         // eslint-disable-next-line no-await-in-loop
         const fbPagesData: any = await fbPagesFetch.json();
-        allPages.push(...(fbPagesData.data ?? []));
+        const pages = fbPagesData.data ?? [];
+        personalPageCount += pages.length;
+        allPages.push(...pages);
+        console.log(`[facebook callback] /me/accounts returned ${pages.length} pages (total so far: ${personalPageCount})`);
         nextUrl = fbPagesData.paging?.next ?? null;
       }
+      console.log(`[facebook callback] PART 1 complete: ${personalPageCount} personal account pages`);
 
       // PART 2: Fetch Business Manager accounts and their pages
+      let businessPageCount = 0;
       try {
         const businessesRes: Response = await fetch(
           `https://graph.facebook.com/v20.0/me/businesses?fields=id,name&limit=100&access_token=${accessToken}`
         );
         const businessesData: any = await businessesRes.json();
         const businesses = businessesData.data ?? [];
+        console.log(`[facebook callback] /me/businesses returned ${businesses.length} business accounts`);
 
         for (const business of businesses) {
-          let businessPageUrl: string | null =
-            `https://graph.facebook.com/v20.0/${business.id}/owned_pages?fields=id,name,picture&limit=100&access_token=${accessToken}`;
+          console.log(`[facebook callback] Fetching pages for business: ${business.id} (${business.name})`);
+          // Fetch both owned_pages AND client_pages for this Business Manager
+          // - owned_pages: pages the BM owns directly
+          // - client_pages: pages of clients shared with this BM (agency use case)
+          for (const pageEndpoint of ["owned_pages", "client_pages"]) {
+            let businessPageUrl: string | null =
+              `https://graph.facebook.com/v20.0/${business.id}/${pageEndpoint}?fields=id,name,picture&limit=100&access_token=${accessToken}`;
 
-          while (businessPageUrl) {
-            // eslint-disable-next-line no-await-in-loop
-            const businessPagesFetch: Response = await fetch(businessPageUrl);
-            // eslint-disable-next-line no-await-in-loop
-            const businessPagesData: any = await businessPagesFetch.json();
-            const bpages = businessPagesData.data ?? [];
+            let pagesFromEndpoint = 0;
+            while (businessPageUrl) {
+              // eslint-disable-next-line no-await-in-loop
+              const businessPagesFetch: Response = await fetch(businessPageUrl);
+              // eslint-disable-next-line no-await-in-loop
+              const businessPagesData: any = await businessPagesFetch.json();
 
-            // Add Business Manager pages to allPages (avoid duplicates by ID)
-            const existingIds = new Set(allPages.map((p: any) => p.id));
-            for (const bp of bpages) {
-              if (!existingIds.has(bp.id)) {
-                allPages.push(bp);
+              if (businessPagesData.error) {
+                console.log(`[facebook callback] ${pageEndpoint} error for ${business.id}: ${businessPagesData.error.message}`);
+                break;
               }
-            }
 
-            businessPageUrl = businessPagesData.paging?.next ?? null;
+              const bpages = businessPagesData.data ?? [];
+              pagesFromEndpoint += bpages.length;
+
+              // Add pages to allPages (avoid duplicates by ID)
+              const existingIds = new Set(allPages.map((p: any) => p.id));
+              for (const bp of bpages) {
+                if (!existingIds.has(bp.id)) {
+                  allPages.push(bp);
+                  businessPageCount++;
+                }
+              }
+
+              businessPageUrl = businessPagesData.paging?.next ?? null;
+            }
+            console.log(`[facebook callback] Business ${business.id} ${pageEndpoint}: ${pagesFromEndpoint} pages found`);
           }
         }
+        console.log(`[facebook callback] PART 2 complete: ${businessPageCount} business manager pages added`);
       } catch (err) {
         // Business Manager fetch failed, but we still have personal pages — continue
         console.error("[facebook callback] Error fetching Business Manager pages:", err);
       }
 
       const pages = allPages;
+      console.log(`[facebook callback] TOTAL PAGES COLLECTED: ${pages.length}`);
+      console.log(`[facebook callback] Pages: ${JSON.stringify(pages.map((p: any) => ({ id: p.id, name: p.name, hasToken: !!p.access_token })))}`);
 
       if (pages.length === 0) {
         // Fallback to user info (no pages)
@@ -300,7 +347,7 @@ export async function GET(
         const p = pages[0];
         const pagesForSelection = [
           ...personalProfile,
-          { id: p.id, name: p.name, picture: p.picture?.data?.url ?? null },
+          { id: p.id, name: p.name, accessToken: p.access_token ?? null, picture: p.picture?.data?.url ?? null },
         ];
 
         if (pagesForSelection.length === 1) {
@@ -343,8 +390,7 @@ export async function GET(
           ...pages.map((p: any) => ({
             id: p.id,
             name: p.name,
-            // accessToken is intentionally omitted here — it will be fetched in
-            // finalize-selection using the userAccessToken stored at root level.
+            accessToken: p.access_token ?? null,
             picture: p.picture?.data?.url ?? null,
           })),
         ];
@@ -584,14 +630,17 @@ export async function GET(
       },
     });
 
-    // ── Update client logo if not already set ────────────────────────────────
+    // ── Cache profile pic in Supabase Storage + update client logo ──────────
     if (profilePic) {
+      const cachedPic = await cacheProfilePic(profilePic, clientId, networkKey);
+      // Update the stored profilePic with the permanent Supabase URL
+      await db.clientSocialNetwork.updateMany({
+        where: { clientId, network: networkEnum as any, pageId: pageIdForNetwork },
+        data: { profilePic: cachedPic },
+      });
       await db.clientProfile.updateMany({
-        where: {
-          id: clientId,
-          OR: [{ logoUrl: null }, { logoUrl: "" }],
-        },
-        data: { logoUrl: profilePic },
+        where: { id: clientId },
+        data: { logoUrl: cachedPic },
       });
     }
 

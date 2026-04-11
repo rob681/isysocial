@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
@@ -118,6 +119,8 @@ export default function ClientDetailPage() {
     name: "", email: "", phone: "", role: "REVIEWER" as "APPROVER" | "REVIEWER" | "OBSERVER",
   });
   const [openContactMenu, setOpenContactMenu] = useState<string | null>(null);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editContactForm, setEditContactForm] = useState({ name: "", email: "" });
 
   // Show connection success/error toasts from OAuth redirect
   useEffect(() => {
@@ -200,6 +203,16 @@ export default function ClientDetailPage() {
 
   const removeContactMutation = trpc.clientContacts.remove.useMutation({
     onSuccess: () => { toast({ title: "Contacto eliminado" }); refetchContacts(); setOpenContactMenu(null); },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const updateContactMutation = trpc.clientContacts.updateContact.useMutation({
+    onSuccess: () => {
+      toast({ title: "Datos actualizados" });
+      refetchContacts();
+      setEditingContactId(null);
+      setOpenContactMenu(null);
+    },
     onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
@@ -564,94 +577,166 @@ export default function ClientDetailPage() {
                 }[contact.role as string] ?? { label: contact.role, icon: User, color: "bg-gray-100 text-gray-700 border-gray-200" };
                 const RoleIcon = roleConfig.icon;
                 const hasPassword = !!contact.user?.passwordHash;
+                const isEditing = editingContactId === contact.id;
 
                 return (
                   <Card key={contact.id} className={!contact.isActive ? "opacity-60" : ""}>
-                    <CardContent className="py-4 flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-semibold text-sm flex-shrink-0">
-                        {(contact.user?.name ?? "?")[0]?.toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium truncate">{contact.user?.name}</p>
-                          {!contact.isActive && (
-                            <Badge variant="outline" className="text-[10px] py-0 text-muted-foreground">Inactivo</Badge>
-                          )}
-                          {!hasPassword && (
-                            <Badge variant="outline" className="text-[10px] py-0 text-amber-600 border-amber-300 bg-amber-50">
-                              Pendiente
-                            </Badge>
-                          )}
+                    <CardContent className="py-4 space-y-3">
+                      {/* Normal view */}
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-semibold text-sm flex-shrink-0">
+                          {(contact.user?.name ?? "?")[0]?.toUpperCase()}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{contact.user?.email}</p>
-                      </div>
-                      <Badge variant="outline" className={`flex-shrink-0 text-xs gap-1 ${roleConfig.color}`}>
-                        <RoleIcon className="h-3 w-3" />
-                        {roleConfig.label}
-                      </Badge>
-
-                      {/* Menu */}
-                      <div className="relative flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setOpenContactMenu(openContactMenu === contact.id ? null : contact.id)}
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                        {openContactMenu === contact.id && (
-                          <div className="absolute right-0 top-9 z-50 w-52 rounded-md border bg-popover shadow-md text-sm">
-                            {/* Change role */}
-                            <div className="px-3 py-2 text-xs text-muted-foreground font-medium border-b">Cambiar rol</div>
-                            {(["APPROVER", "REVIEWER", "OBSERVER"] as const).map((r) => (
-                              <button
-                                key={r}
-                                className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 ${contact.role === r ? "font-medium text-primary" : ""}`}
-                                onClick={() => updateRoleMutation.mutate({ contactId: contact.id, role: r })}
-                              >
-                                {contact.role === r && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
-                                {contact.role !== r && <span className="w-3.5" />}
-                                {{ APPROVER: "Aprobador", REVIEWER: "Revisor", OBSERVER: "Observador" }[r]}
-                              </button>
-                            ))}
-                            <div className="border-t my-1" />
-                            {/* Resend invite */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">{contact.user?.name}</p>
+                            {!contact.isActive && (
+                              <Badge variant="outline" className="text-[10px] py-0 text-muted-foreground">Inactivo</Badge>
+                            )}
                             {!hasPassword && (
+                              <Badge variant="outline" className="text-[10px] py-0 text-amber-600 border-amber-300 bg-amber-50">
+                                Pendiente
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{contact.user?.email}</p>
+                        </div>
+                        <Badge variant="outline" className={`flex-shrink-0 text-xs gap-1 ${roleConfig.color}`}>
+                          <RoleIcon className="h-3 w-3" />
+                          {roleConfig.label}
+                        </Badge>
+
+                        {/* Menu */}
+                        <div className="relative flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setOpenContactMenu(openContactMenu === contact.id ? null : contact.id)}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                          {openContactMenu === contact.id && (
+                            <div className="absolute right-0 top-9 z-50 w-52 rounded-md border bg-popover shadow-md text-sm">
+                              {/* Edit data */}
                               <button
                                 className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
-                                onClick={() => resendInviteMutation.mutate({ contactId: contact.id })}
+                                onClick={() => {
+                                  setEditContactForm({ name: contact.user?.name ?? "", email: contact.user?.email ?? "" });
+                                  setEditingContactId(contact.id);
+                                  setOpenContactMenu(null);
+                                }}
                               >
-                                <Mail className="h-3.5 w-3.5" />
-                                Reenviar invitación
+                                <Pencil className="h-3.5 w-3.5" />
+                                Editar nombre / correo
                               </button>
-                            )}
-                            {/* Toggle active */}
-                            <button
-                              className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
-                              onClick={() => setActiveMutation.mutate({ contactId: contact.id, isActive: !contact.isActive })}
-                            >
-                              {contact.isActive ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                              {contact.isActive ? "Desactivar" : "Activar"}
-                            </button>
-                            {/* Remove */}
-                            <button
-                              className="w-full text-left px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-destructive"
-                              onClick={() => {
-                                setOpenContactMenu(null);
-                                setTimeout(() => {
-                                  if (window.confirm(`¿Eliminar a ${contact.user?.name}?\n\nEsta acción eliminará al contacto permanentemente y no se puede deshacer.`)) {
-                                    removeContactMutation.mutate({ contactId: contact.id });
-                                  }
-                                }, 50);
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Eliminar contacto
-                            </button>
-                          </div>
-                        )}
+                              <div className="border-t my-1" />
+                              {/* Change role */}
+                              <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">Cambiar rol</div>
+                              {(["APPROVER", "REVIEWER", "OBSERVER"] as const).map((r) => (
+                                <button
+                                  key={r}
+                                  className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 ${contact.role === r ? "font-medium text-primary" : ""}`}
+                                  onClick={() => updateRoleMutation.mutate({ contactId: contact.id, role: r })}
+                                >
+                                  {contact.role === r && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+                                  {contact.role !== r && <span className="w-3.5" />}
+                                  {{ APPROVER: "Aprobador", REVIEWER: "Revisor", OBSERVER: "Observador" }[r]}
+                                </button>
+                              ))}
+                              <div className="border-t my-1" />
+                              {/* Resend invite */}
+                              {!hasPassword && (
+                                <button
+                                  className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+                                  onClick={() => resendInviteMutation.mutate({ contactId: contact.id })}
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  Reenviar invitación
+                                </button>
+                              )}
+                              {/* Toggle active */}
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+                                onClick={() => setActiveMutation.mutate({ contactId: contact.id, isActive: !contact.isActive })}
+                              >
+                                {contact.isActive ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                {contact.isActive ? "Dar de baja" : "Reactivar"}
+                              </button>
+                              {/* Remove */}
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-destructive"
+                                onClick={() => {
+                                  setOpenContactMenu(null);
+                                  setTimeout(() => {
+                                    if (window.confirm(`¿Eliminar a ${contact.user?.name}?\n\nEsta acción eliminará al contacto permanentemente y no se puede deshacer.`)) {
+                                      removeContactMutation.mutate({ contactId: contact.id });
+                                    }
+                                  }, 50);
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Eliminar contacto
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Inline edit form */}
+                      {isEditing && (
+                        <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Editar datos del contacto</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-xs text-muted-foreground">Nombre</label>
+                              <Input
+                                className="mt-1 h-8 text-sm"
+                                value={editContactForm.name}
+                                onChange={(e) => setEditContactForm((f) => ({ ...f, name: e.target.value }))}
+                                placeholder="Nombre completo"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Correo electrónico</label>
+                              <Input
+                                className="mt-1 h-8 text-sm"
+                                type="email"
+                                value={editContactForm.email}
+                                onChange={(e) => setEditContactForm((f) => ({ ...f, email: e.target.value }))}
+                                placeholder="correo@empresa.com"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 justify-end pt-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setEditingContactId(null)}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={updateContactMutation.isLoading}
+                              onClick={() => updateContactMutation.mutate({
+                                contactId: contact.id,
+                                name: editContactForm.name || undefined,
+                                email: editContactForm.email || undefined,
+                              })}
+                            >
+                              {updateContactMutation.isLoading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                              ) : (
+                                <Save className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              Guardar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );

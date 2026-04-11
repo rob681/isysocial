@@ -988,4 +988,78 @@ export const clientsRouter = router({
 
       return { pages: grouped, total: pages.length };
     }),
+
+  refreshClientPageInfo: adminProcedure
+    .input(z.object({ clientId: z.string(), network: z.string(), pageId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const client = await ctx.db.clientProfile.findUnique({
+        where: { id: input.clientId },
+        select: { agencyId: true },
+      });
+      if (!client || client.agencyId !== agencyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes acceso" });
+      }
+
+      const record = await ctx.db.clientSocialNetwork.findFirst({
+        where: {
+          clientId: input.clientId,
+          network: input.network as any,
+          pageId: input.pageId,
+        },
+      });
+
+      if (!record || !record.accessToken) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Página no encontrada o sin token" });
+      }
+
+      const token = record.accessToken;
+      let tokenValid = false;
+      let accountName = record.accountName;
+      let profilePic = record.profilePic;
+
+      try {
+        if (input.network === "FACEBOOK") {
+          const res = await fetch(
+            `https://graph.facebook.com/v20.0/${record.accountId ?? record.pageId}?fields=name,picture&access_token=${token}`
+          );
+          const data = await res.json();
+          if (!data.error) {
+            tokenValid = true;
+            accountName = data.name ?? accountName;
+            profilePic = data.picture?.data?.url ?? profilePic;
+          }
+        } else if (input.network === "INSTAGRAM") {
+          const res = await fetch(
+            `https://graph.facebook.com/v20.0/${record.accountId}?fields=name,username,profile_picture_url&access_token=${token}`
+          );
+          const data = await res.json();
+          if (!data.error) {
+            tokenValid = true;
+            accountName = data.username ? `@${data.username.replace(/^@/, "")}` : (data.name ?? accountName);
+            profilePic = data.profile_picture_url ?? profilePic;
+          }
+        } else if (input.network === "LINKEDIN") {
+          const res = await fetch(
+            `https://api.linkedin.com/v2/userinfo`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          tokenValid = res.ok;
+        }
+      } catch {
+        tokenValid = false;
+      }
+
+      await ctx.db.clientSocialNetwork.updateMany({
+        where: { clientId: input.clientId, network: input.network as any, pageId: input.pageId },
+        data: {
+          accountName: accountName ?? undefined,
+          profilePic: profilePic ?? undefined,
+          isActive: tokenValid,
+        },
+      });
+
+      return { tokenValid, accountName, profilePic };
+    }),
 });

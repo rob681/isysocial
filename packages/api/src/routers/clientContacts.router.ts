@@ -247,6 +247,49 @@ export const clientContactsRouter = router({
       return { success: true };
     }),
 
+  // ─── Editar nombre y/o email del contacto ───────────────────────────────────
+  updateContact: adminProcedure
+    .input(
+      z.object({
+        contactId: z.string(),
+        name: z.string().min(2, "El nombre es requerido").optional(),
+        email: z.string().email("Email inválido").optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const contact = await ctx.db.clientContact.findFirst({
+        where: { id: input.contactId, clientProfile: { agencyId } },
+        include: { user: { select: { id: true, email: true } } },
+      });
+      if (!contact) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contacto no encontrado" });
+      }
+
+      // Verificar que el nuevo email no esté ya en uso por otro usuario
+      if (input.email && input.email !== contact.user.email) {
+        const existing = await ctx.db.user.findUnique({ where: { email: input.email } });
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Este correo ya está registrado por otro usuario.",
+          });
+        }
+      }
+
+      const updated = await ctx.db.user.update({
+        where: { id: contact.user.id },
+        data: {
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.email ? { email: input.email } : {}),
+        },
+        select: { name: true, email: true },
+      });
+
+      return updated;
+    }),
+
   // ─── Eliminar contacto ───────────────────────────────────────────────────────
   remove: adminProcedure
     .input(z.object({ contactId: z.string() }))
