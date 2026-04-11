@@ -97,6 +97,19 @@ enum PublishStatus {
   @@schema("isysocial")
 }
 
+// ─── PERFORMANCE TIERS ──────────────────────────────────────────────────────
+// Computed by daily cron from PostInsights percentiles per client+network,
+// or set manually by admin/editor via "Marcar como top performer".
+// Used as brand voice training signal for the Isy agent.
+enum PerformanceTier {
+  TOP // top 25% of client's posts on this network
+  HIGH // 50-75%
+  AVERAGE // 25-50%
+  LOW // bottom 25%
+
+  @@schema("isysocial")
+}
+
 enum ContactRole {
   APPROVER   // Puede aprobar / rechazar posts
   REVIEWER   // Puede ver y comentar, pero no aprobar
@@ -389,6 +402,15 @@ model Post {
   scheduledAt DateTime?
   publishedAt DateTime?
 
+  // Performance tier — set either by daily cron (auto, percentiles per client+network)
+  // or manually by admin/editor via "Marcar como top performer".
+  // Used as brand voice training signal for the Isy agent.
+  performanceTier       PerformanceTier?
+  performanceTierSource String? // "auto" | "manual"
+  performanceComputedAt DateTime? // when the cron last computed it (null if manual)
+  markedTopBy           String? // userId — set only when source = "manual"
+  markedTopAt           DateTime?
+
   revisionsUsed            Int     @default(0)
   revisionsLimit           Int     @default(3)
   hasRequestedGuidedReview Boolean @default(false)
@@ -412,6 +434,7 @@ model Post {
   statusLogs         PostStatusLog[]
   revisions          PostRevision[]
   publishLogs        PostPublishLog[]
+  insights           PostInsights[]
   guidedReviewSession GuidedReviewSession?
 
   @@index([agencyId, clientId])
@@ -419,6 +442,7 @@ model Post {
   @@index([scheduledAt])
   @@index([mirrorGroupId])
   @@index([isytaskTaskId])
+  @@index([clientId, network, performanceTier])
   @@map("iso_posts")
   @@schema("isysocial")
 }
@@ -543,6 +567,58 @@ model PostPublishLog {
 
   @@index([postId])
   @@map("iso_post_publish_logs")
+  @@schema("isysocial")
+}
+
+// ─── POST INSIGHTS (snapshots of engagement metrics over time) ──────────────
+// One row per (postId, fetchedAt). Populated by the daily insights cron after
+// the post is published. Snapshots let us track growth and pick a stable
+// "final" reading (e.g. day 7) for fair performance tier comparisons.
+//
+// Cadence (planned for cron):
+//   - Day 0:    skip (data not stable)
+//   - Day 1-7:  fetch daily
+//   - Day 7+:   stop (final snapshot used for performance tier)
+//
+// Pending: Meta App Review approval to unlock all metric scopes.
+model PostInsights {
+  id     String @id @default(cuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Denormalized for fast filtering + percentile computation by client+network
+  agencyId String
+  clientId String
+  network  SocialNetwork
+
+  // Snapshot timing
+  fetchedAt    DateTime @default(now())
+  postAgeHours Int // (fetchedAt - post.publishedAt) in hours; enables fair age-bucketed comparison
+
+  // Core metrics — all default 0 so partial fetches don't break aggregations
+  impressions Int @default(0)
+  reach       Int @default(0)
+  likes       Int @default(0)
+  comments    Int @default(0)
+  saved       Int @default(0)
+  shares      Int @default(0)
+  plays       Int @default(0) // reels / videos only
+
+  // Computed at write time for convenience
+  // = (likes + comments + saved + shares) / max(reach, 1)
+  engagementRate Decimal? @db.Decimal(8, 6)
+
+  // Raw Meta API response for forward compatibility (new fields, debugging)
+  rawData Json?
+
+  // Fetch outcome — distinguishes "0 metrics" from "fetch failed"
+  fetchSuccess Boolean @default(true)
+  fetchError   String?
+
+  @@index([postId, fetchedAt(sort: Desc)])
+  @@index([clientId, network, fetchedAt])
+  @@index([agencyId, fetchedAt])
+  @@map("iso_post_insights")
   @@schema("isysocial")
 }
 
