@@ -12,7 +12,12 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 1000,
+            // 60s default: data is considered fresh for 1 minute,
+            // eliminating redundant refetches on navigation/tab switches.
+            // Individual queries that need fresher data can override this.
+            staleTime: 60 * 1000,
+            // Keep cached data in memory for 10 minutes after last use (v4: cacheTime)
+            cacheTime: 10 * 60 * 1000,
             refetchOnWindowFocus: false,
             retry: (failureCount, error: any) => {
               if (error?.data?.code === "UNAUTHORIZED") return false;
