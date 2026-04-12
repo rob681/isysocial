@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/analytics-reports",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/post-insights",
+      "schedule": "0 3 * * *"
     }
   ]
 }
