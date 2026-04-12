@@ -884,4 +884,83 @@ export const socialInsightsRouter = router({
       });
       return { success: true };
     }),
+
+  /**
+   * Test Instagram Insights API call for app review
+   * Makes a real API call to instagram_business_manage_insights endpoint
+   */
+  testInstagramInsights: protectedProcedure.query(async ({ ctx }) => {
+    const agencyId = getAgencyId(ctx);
+
+    // Get all Instagram accounts connected to this agency
+    const instagramAccounts = await ctx.db.agencySocialAccount.findMany({
+      where: {
+        agencyId,
+        network: "INSTAGRAM",
+        isActive: true,
+      },
+      select: {
+        id: true,
+        accountId: true,
+        accessToken: true,
+        accountName: true,
+      },
+    });
+
+    if (instagramAccounts.length === 0) {
+      return {
+        success: false,
+        error: "No Instagram accounts found",
+        accounts: [],
+      };
+    }
+
+    // Test each account by calling the insights endpoint
+    const results = await Promise.all(
+      instagramAccounts.map(async (account) => {
+        try {
+          const response = await fetch(
+            `https://graph.instagram.com/v20.0/${account.accountId}/insights?metric=impressions,reach&period=day&access_token=${account.accessToken}`
+          );
+          const data = await response.json();
+
+          console.log(`[testInstagramInsights] Account ${account.accountName} (${account.accountId}): SUCCESS`, {
+            status: response.status,
+            hasData: !!data?.data,
+            dataLength: data?.data?.length,
+          });
+
+          return {
+            accountId: account.accountId,
+            accountName: account.accountName,
+            success: response.ok,
+            status: response.status,
+            hasData: !!data?.data,
+            data: data,
+          };
+        } catch (error: any) {
+          console.error(`[testInstagramInsights] Account ${account.accountName} (${account.accountId}): ERROR`, error.message);
+          return {
+            accountId: account.accountId,
+            accountName: account.accountName,
+            success: false,
+            error: error.message,
+          };
+        }
+      })
+    );
+
+    // Check if at least one was successful
+    const anySuccess = results.some((r) => r.success);
+
+    return {
+      success: anySuccess,
+      message: anySuccess
+        ? "✅ Test API call successful! Meta should detect this call within 24 hours."
+        : "❌ All test calls failed. Check tokens and permissions.",
+      accounts: results,
+      totalAccounts: instagramAccounts.length,
+      successfulCalls: results.filter((r) => r.success).length,
+    };
+  }),
 });
