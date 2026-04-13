@@ -57,6 +57,22 @@ import { ContentGrid } from "@/components/content/content-grid";
 import { ContentKanban } from "@/components/content/content-kanban";
 import { Topbar } from "@/components/layout/topbar";
 
+/* ─── Performance Tier Badge ─────────────────────────────────────── */
+function PerformanceTierBadge({ tier }: { tier: "TOP" | "HIGH" | "AVERAGE" | "LOW" }) {
+  const config = {
+    TOP: { label: "⭐ TOP", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" },
+    HIGH: { label: "HIGH", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" },
+    AVERAGE: { label: "AVERAGE", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" },
+    LOW: { label: "LOW", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400" },
+  };
+  const { label, className } = config[tier] ?? config.AVERAGE;
+  return (
+    <Badge variant="secondary" className={`text-[10px] ${className}`}>
+      {label}
+    </Badge>
+  );
+}
+
 /* ─── Bulk Action Bar ─────────────────────────────────────────────── */
 function BulkActionBar({
   selectedCount,
@@ -661,6 +677,9 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
                         <Badge variant="secondary" className={statusColor}>
                           {POST_STATUS_LABELS[post.status as PostStatus]}
                         </Badge>
+                        {(post as any).performanceTier && (
+                          <PerformanceTierBadge tier={(post as any).performanceTier} />
+                        )}
                       </div>
                     </Link>
                   </div>

@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Layers,
   Upload,
+  TrendingUp,
 } from "lucide-react";
 import {
   Dialog,
@@ -53,6 +54,127 @@ import { MediaVersionUploadModal } from "@/components/post-editor/media-version-
 import { PublishPostDialog } from "@/components/publish-post-dialog";
 import { Topbar } from "@/components/layout/topbar";
 import { VideoReviewPanel } from "@/components/video/video-review-panel";
+
+/* ─── Performance Tier Badge ─────────────────────────────────────── */
+function PerformanceTierBadge({ tier }: { tier: "TOP" | "HIGH" | "AVERAGE" | "LOW" }) {
+  const config = {
+    TOP: { label: "⭐ TOP", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" },
+    HIGH: { label: "HIGH", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" },
+    AVERAGE: { label: "AVERAGE", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" },
+    LOW: { label: "LOW", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400" },
+  };
+  const { label, className } = config[tier] ?? config.AVERAGE;
+  return (
+    <Badge variant="secondary" className={`${className}`}>
+      {label}
+    </Badge>
+  );
+}
+
+/* ─── Performance Panel ──────────────────────────────────────────── */
+function PerformancePanel({ postId }: { postId: string }) {
+  const { data, isLoading } = trpc.socialInsights.getPostInsightsHistory.useQuery({ postId });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Rendimiento
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-20 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  const latestSnapshot = data.snapshots.length > 0
+    ? data.snapshots[data.snapshots.length - 1]
+    : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" />
+          Rendimiento
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Tier + latest engagement */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {data.performanceTier && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Tier:</span>
+              <PerformanceTierBadge tier={data.performanceTier as any} />
+              {data.performanceTierSource && (
+                <span className="text-xs text-muted-foreground">
+                  ({data.performanceTierSource === "manual" ? "manual" : "auto"})
+                </span>
+              )}
+            </div>
+          )}
+          {latestSnapshot?.engagementRate !== null && latestSnapshot?.engagementRate !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Engagement:</span>
+              <span className="text-sm font-semibold text-primary">
+                {latestSnapshot.engagementRate.toFixed(2)}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Snapshots table or empty state */}
+        {data.snapshots.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4 bg-muted/30 rounded-lg">
+            Los datos de rendimiento estarán disponibles 24h después de la publicación
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-left pb-2 font-medium">Día</th>
+                  <th className="text-right pb-2 font-medium">Alcance</th>
+                  <th className="text-right pb-2 font-medium">Likes</th>
+                  <th className="text-right pb-2 font-medium">Comentarios</th>
+                  <th className="text-right pb-2 font-medium">Engagement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.snapshots.map((snap) => (
+                  <tr key={snap.id} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="py-2 text-muted-foreground">
+                      {new Date(snap.fetchedAt).toLocaleDateString("es", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      <span className="ml-1 opacity-60">(+{snap.postAgeHours}h)</span>
+                    </td>
+                    <td className="py-2 text-right">{snap.reach.toLocaleString("es")}</td>
+                    <td className="py-2 text-right">{snap.likes.toLocaleString("es")}</td>
+                    <td className="py-2 text-right">{snap.comments.toLocaleString("es")}</td>
+                    <td className="py-2 text-right font-medium">
+                      {snap.engagementRate !== null && snap.engagementRate !== undefined
+                        ? `${snap.engagementRate.toFixed(2)}%`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -346,6 +468,9 @@ export default function PostDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Performance */}
+          <PerformancePanel postId={post.id} />
 
           {/* Comments */}
           <Card>

@@ -886,6 +886,255 @@ export const socialInsightsRouter = router({
     }),
 
   /**
+   * Get PostInsights snapshots stored in DB for a specific post (from cron).
+   * Ordered by postAgeHours ascending (oldest snapshot first).
+   */
+  getPostInsightsHistory: adminProcedure
+    .input(z.object({ postId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const post = await ctx.db.post.findFirst({
+        where: { id: input.postId, agencyId },
+        select: {
+          id: true,
+          performanceTier: true,
+          performanceTierSource: true,
+          insights: {
+            orderBy: { postAgeHours: "asc" },
+            select: {
+              id: true,
+              fetchedAt: true,
+              postAgeHours: true,
+              impressions: true,
+              reach: true,
+              likes: true,
+              comments: true,
+              saved: true,
+              shares: true,
+              plays: true,
+              engagementRate: true,
+              fetchSuccess: true,
+            },
+          },
+        },
+      });
+
+      if (!post) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Publicación no encontrada." });
+      }
+
+      return {
+        postId: post.id,
+        performanceTier: post.performanceTier,
+        performanceTierSource: post.performanceTierSource,
+        snapshots: post.insights.map((s) => ({
+          ...s,
+          engagementRate: s.engagementRate ? Number(s.engagementRate) : null,
+        })),
+      };
+    }),
+
+  /**
+   * Get aggregated insights summary for a client (avg engagement, top post, tier distribution).
+   * Used for the admin client insights dashboard and client dashboard widget.
+   */
+  getClientInsightsSummary: adminProcedure
+    .input(
+      z.object({
+        clientId: z.string(),
+        network: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const client = await ctx.db.clientProfile.findFirst({
+        where: { id: input.clientId, agencyId },
+        select: { id: true, companyName: true },
+      });
+      if (!client) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
+      }
+
+      // Tier distribution
+      const tierCounts = await ctx.db.post.groupBy({
+        by: ["performanceTier"],
+        where: {
+          clientId: input.clientId,
+          agencyId,
+          performanceTier: { not: null },
+          ...(input.network ? { network: input.network as any } : {}),
+        },
+        _count: { performanceTier: true },
+      });
+
+      const tierDistribution: Record<string, number> = {
+        TOP: 0, HIGH: 0, AVERAGE: 0, LOW: 0,
+      };
+      for (const row of tierCounts) {
+        if (row.performanceTier) {
+          tierDistribution[row.performanceTier] = row._count.performanceTier;
+        }
+      }
+
+      // Most recent snapshot per post to get current engagement rates
+      const recentSnapshots = await ctx.db.postInsights.findMany({
+        where: {
+          clientId: input.clientId,
+          agencyId,
+          fetchSuccess: true,
+          engagementRate: { not: null },
+          ...(input.network ? { network: input.network as any } : {}),
+        },
+        orderBy: { fetchedAt: "desc" },
+        take: 200,
+        select: {
+          postId: true,
+          engagementRate: true,
+          reach: true,
+          fetchedAt: true,
+          post: {
+            select: {
+              id: true,
+              title: true,
+              copy: true,
+              network: true,
+              publishedAt: true,
+              media: { select: { fileUrl: true }, take: 1 },
+            },
+          },
+        },
+      });
+
+      // Deduplicate: keep only the latest snapshot per post
+      const latestByPost = new Map<string, typeof recentSnapshots[0]>();
+      for (const snap of recentSnapshots) {
+        if (!latestByPost.has(snap.postId)) {
+          latestByPost.set(snap.postId, snap);
+        }
+      }
+
+      const uniqueSnaps = Array.from(latestByPost.values());
+      const engagementValues = uniqueSnaps
+        .map((s) => (s.engagementRate ? Number(s.engagementRate) : null))
+        .filter((v): v is number => v !== null);
+
+      const avgEngagementRate =
+        engagementValues.length > 0
+          ? engagementValues.reduce((a, b) => a + b, 0) / engagementValues.length
+          : null;
+
+      // Top post by engagement rate
+      const topSnap = uniqueSnaps.reduce(
+        (best, s) => {
+          const eng = s.engagementRate ? Number(s.engagementRate) : 0;
+          const bestEng = best?.engagementRate ? Number(best.engagementRate) : 0;
+          return eng > bestEng ? s : best;
+        },
+        null as typeof recentSnapshots[0] | null
+      );
+
+      // Best post of the current month
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthSnap = uniqueSnaps
+        .filter((s) => s.post.publishedAt && new Date(s.post.publishedAt) >= monthStart)
+        .reduce(
+          (best, s) => {
+            const eng = s.engagementRate ? Number(s.engagementRate) : 0;
+            const bestEng = best?.engagementRate ? Number(best.engagementRate) : 0;
+            return eng > bestEng ? s : best;
+          },
+          null as typeof recentSnapshots[0] | null
+        );
+
+      return {
+        clientId: input.clientId,
+        clientName: client.companyName,
+        avgEngagementRate: avgEngagementRate !== null ? Math.round(avgEngagementRate * 10000) / 10000 : null,
+        tierDistribution,
+        topPost: topSnap
+          ? {
+              postId: topSnap.postId,
+              title: topSnap.post.title || topSnap.post.copy?.slice(0, 60) || null,
+              network: topSnap.post.network,
+              engagementRate: topSnap.engagementRate ? Number(topSnap.engagementRate) : null,
+              reach: topSnap.reach,
+              thumbnail: topSnap.post.media[0]?.fileUrl ?? null,
+            }
+          : null,
+        bestPostThisMonth: monthSnap
+          ? {
+              postId: monthSnap.postId,
+              title: monthSnap.post.title || monthSnap.post.copy?.slice(0, 60) || null,
+              network: monthSnap.post.network,
+              engagementRate: monthSnap.engagementRate ? Number(monthSnap.engagementRate) : null,
+              reach: monthSnap.reach,
+              thumbnail: monthSnap.post.media[0]?.fileUrl ?? null,
+              publishedAt: monthSnap.post.publishedAt,
+            }
+          : null,
+      };
+    }),
+
+  /**
+   * Get the best post of the current month for the logged-in client (by engagementRate).
+   * Used in the client dashboard widget. Works for CLIENTE role.
+   */
+  getBestPostThisMonth: protectedProcedure.query(async ({ ctx }) => {
+    const agencyId = getAgencyId(ctx);
+    const clientId = (ctx.session.user as any).clientId as string | undefined;
+    if (!clientId) return null;
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const snapshots = await ctx.db.postInsights.findMany({
+      where: {
+        clientId,
+        agencyId,
+        fetchSuccess: true,
+        engagementRate: { not: null },
+        post: {
+          publishedAt: { gte: monthStart },
+          status: "PUBLISHED",
+        },
+      },
+      orderBy: { engagementRate: "desc" },
+      take: 1,
+      select: {
+        postId: true,
+        engagementRate: true,
+        reach: true,
+        post: {
+          select: {
+            id: true,
+            title: true,
+            copy: true,
+            network: true,
+            publishedAt: true,
+            media: { select: { fileUrl: true }, take: 1 },
+          },
+        },
+      },
+    });
+
+    if (snapshots.length === 0) return null;
+
+    const snap = snapshots[0];
+    return {
+      postId: snap.postId,
+      title: snap.post.title || snap.post.copy?.slice(0, 60) || null,
+      network: snap.post.network,
+      engagementRate: snap.engagementRate ? Number(snap.engagementRate) : null,
+      reach: snap.reach,
+      thumbnail: snap.post.media[0]?.fileUrl ?? null,
+      publishedAt: snap.post.publishedAt,
+    };
+  }),
+
+  /**
    * Test Instagram Insights API call for app review
    * Makes a real API call to instagram_business_manage_insights endpoint
    */

@@ -18,6 +18,7 @@ import {
   CalendarDays,
   TrendingUp,
   Palette,
+  Star,
 } from "lucide-react";
 import {
   NETWORK_LABELS,
@@ -63,6 +64,8 @@ export default function ClienteDashboardPage() {
   const { data: reviewPosts } = trpc.posts.list.useQuery({ status: "IN_REVIEW" as any, page: 1, limit: 5 });
   // Upcoming scheduled posts (next 14 days)
   const { data: upcomingPosts } = trpc.calendar.getUpcoming.useQuery({ days: 14 });
+  // Best post of the month
+  const { data: bestPost } = trpc.socialInsights.getBestPostThisMonth.useQuery();
 
   const pendingCount = allPosts?.posts.filter((p) => p.status === "IN_REVIEW").length ?? 0;
   const approvedCount = allPosts?.posts.filter((p) => ["APPROVED", "SCHEDULED", "PUBLISHED"].includes(p.status)).length ?? 0;
@@ -279,6 +282,46 @@ export default function ClienteDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Best post of the month */}
+      {bestPost && (
+        <Link href={`/cliente/contenido/${bestPost.postId}`}>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-yellow-200 dark:border-yellow-800 bg-gradient-to-r from-yellow-50/50 to-transparent dark:from-yellow-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center flex-shrink-0">
+                  <Star className="h-6 w-6 text-yellow-600 fill-yellow-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wide mb-0.5">
+                    Mejor publicación del mes
+                  </p>
+                  <p className="text-sm font-medium truncate">
+                    {bestPost.title || "Ver publicación"}
+                  </p>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    {bestPost.engagementRate !== null && (
+                      <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium">
+                        <TrendingUp className="h-3 w-3" />
+                        {bestPost.engagementRate.toFixed(2)}% engagement
+                      </span>
+                    )}
+                    {bestPost.reach > 0 && (
+                      <span>{bestPost.reach.toLocaleString("es")} alcance</span>
+                    )}
+                  </div>
+                </div>
+                {bestPost.thumbnail && (
+                  <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                    <img src={bestPost.thumbnail} alt="" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Quick links */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
