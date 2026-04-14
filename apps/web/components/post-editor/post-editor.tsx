@@ -32,7 +32,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AiAssistant } from "./ai-assistant";
 import { SchedulePopover } from "./schedule-popover";
 import { CalendarScheduler } from "./calendar-scheduler";
-import type { RepeatConfig } from "./calendar-scheduler";
 import { getFormatRequirements } from "@/lib/media-formats";
 import { VideoEditor as VideoEditorComponent } from "@/components/video-editor/video-editor";
 
@@ -80,7 +79,6 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
   const [isycineVideoUrl, setIsycineVideoUrl] = useState<string | null>(null);
   const [isycineFileName, setIsycineFileName] = useState<string>("");
   const [showCalendarScheduler, setShowCalendarScheduler] = useState(false);
-  const [pendingRepeatConfig, setPendingRepeatConfig] = useState<RepeatConfig | undefined>();
 
   const { data: clients } = trpc.posts.getClientsForSelect.useQuery();
   const { data: categories } = trpc.categories.list.useQuery();
@@ -234,13 +232,6 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
         revisionsLimit: data.revisionsLimit,
         referenceLink: data.referenceLink,
         initialStatus: sendForReview ? "IN_REVIEW" : "DRAFT",
-        ...(pendingRepeatConfig && {
-          recurrence: {
-            type: pendingRepeatConfig.type as "daily" | "weekly" | "monthly",
-            daysOfWeek: pendingRepeatConfig.daysOfWeek,
-            endDate: pendingRepeatConfig.endDate,
-          },
-        }),
       });
     }
   };
@@ -781,18 +772,12 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
               <Button
                 type="button"
                 variant="outline"
-                className="w-full justify-start text-left gap-2"
+                className="w-full justify-start text-left"
                 onClick={() => setShowCalendarScheduler(true)}
               >
                 {watchedValues.scheduledAt
-                  ? new Date(watchedValues.scheduledAt).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                  ? new Date(watchedValues.scheduledAt).toLocaleString("es-ES")
                   : "Selecciona una fecha"}
-                {pendingRepeatConfig && (
-                  <span className="ml-auto text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                    {pendingRepeatConfig.type === "daily" ? "Diario" :
-                     pendingRepeatConfig.type === "weekly" ? "Semanal" : "Mensual"}
-                  </span>
-                )}
               </Button>
             </div>
             {!postId && (
@@ -850,10 +835,10 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
       {showCalendarScheduler && (
         <CalendarScheduler
           value={watchedValues.scheduledAt ? new Date(watchedValues.scheduledAt) : undefined}
-          onChange={(date, repeatConfig) => {
+          onChange={(date) => {
+            // Convert Date to ISO string format for form
             const isoString = date.toISOString().split('T')[0] + 'T' + String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
             form.setValue("scheduledAt", isoString);
-            setPendingRepeatConfig(repeatConfig?.type !== "once" ? repeatConfig : undefined);
           }}
           onClose={() => setShowCalendarScheduler(false)}
         />

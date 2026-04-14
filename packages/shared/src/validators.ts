@@ -138,18 +138,6 @@ export const storyDataSchema = z.object({
   elements: z.array(storyElementSchema),
 });
 
-// ─── Post Recurrence ─────────────────────────────────────────────────────────
-
-export const recurrenceConfigSchema = z.object({
-  type: z.enum(["daily", "weekly", "monthly"]),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(), // weekly
-  dayOfMonth: z.number().int().min(1).max(31).optional(),         // monthly
-  endDate: z.date().optional(),
-  maxOccurrences: z.number().int().min(1).max(365).optional(),
-});
-
-export type RecurrenceConfig = z.infer<typeof recurrenceConfigSchema>;
-
 export const createPostSchema = z.object({
   clientId: z.string().min(1, "Cliente requerido"),
   network: z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"]),
@@ -165,7 +153,6 @@ export const createPostSchema = z.object({
   categoryId: z.string().optional(),
   initialStatus: z.enum(["DRAFT", "IN_REVIEW"]).default("DRAFT"),
   storyData: storyDataSchema.optional(),
-  recurrence: recurrenceConfigSchema.optional(), // optional repeat config
 });
 
 export const updatePostContentSchema = z.object({
