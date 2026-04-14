@@ -30,7 +30,7 @@ function isFrameValid(imageData: ImageData): boolean {
   return contentBytes > totalPixels * 0.01;
 }
 
-function createPlaceholder(width: number, height: number): Canvas {
+function createPlaceholder(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -99,7 +99,7 @@ export async function extractCanvasThumbnail(
         try {
           const placeholderCanvas = createPlaceholder(canvas.width, canvas.height);
           placeholderCanvas.toBlob(
-            (blob) => {
+            (blob: Blob | null) => {
               if (blob && blob.size > 0) {
                 finalize(blob);
               } else {

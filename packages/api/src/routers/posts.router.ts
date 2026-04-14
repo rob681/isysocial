@@ -20,6 +20,63 @@ import { notifyIsytask, buildPostPayload } from "../lib/cross-app-notify";
 import { publishToNetwork } from "../lib/publishers";
 import { broadcastEvent } from "../lib/realtime-events";
 
+// ─── Recurrence helpers ───────────────────────────────────────────────────────
+
+interface RecurrenceParams {
+  recurrenceType: "DAILY" | "WEEKLY" | "MONTHLY";
+  daysOfWeek: number[];
+  startsAt: Date;
+  endsAt?: Date;
+  timeOfDay: string; // "HH:MM"
+  count: number;
+}
+
+function generateRecurrenceInstances(params: RecurrenceParams): Date[] {
+  const { recurrenceType, daysOfWeek, startsAt, endsAt, timeOfDay, count } = params;
+  const [hh, mm] = timeOfDay.split(":").map(Number);
+  const maxDate = endsAt ?? new Date(startsAt.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+  const results: Date[] = [];
+  const cursor = new Date(startsAt);
+
+  // Start from the NEXT occurrence (first occurrence is the original post itself)
+  if (recurrenceType === "DAILY") {
+    cursor.setDate(cursor.getDate() + 1);
+  } else if (recurrenceType === "WEEKLY") {
+    cursor.setDate(cursor.getDate() + 1); // start searching from next day
+  } else if (recurrenceType === "MONTHLY") {
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  while (results.length < count && cursor <= maxDate) {
+    if (recurrenceType === "DAILY") {
+      const d = new Date(cursor);
+      d.setHours(hh!, mm!, 0, 0);
+      results.push(d);
+      cursor.setDate(cursor.getDate() + 1);
+
+    } else if (recurrenceType === "WEEKLY") {
+      const activeDays = daysOfWeek.length > 0 ? daysOfWeek : [startsAt.getDay()];
+      if (activeDays.includes(cursor.getDay())) {
+        const d = new Date(cursor);
+        d.setHours(hh!, mm!, 0, 0);
+        if (d > startsAt && d <= maxDate) {
+          results.push(d);
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+
+    } else if (recurrenceType === "MONTHLY") {
+      const d = new Date(cursor);
+      d.setHours(hh!, mm!, 0, 0);
+      results.push(d);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  }
+
+  return results;
+}
+
 export const postsRouter = router({
   // ─── Create Post ─────────────────────────────────────────────────────────
   create: adminOrPermissionProcedure("CREATE_POSTS")
@@ -81,6 +138,50 @@ export const postsRouter = router({
           note: initialStatus === "IN_REVIEW" ? "Post creado y enviado para aprobación" : "Post creado",
         },
       });
+
+      // ── Recurrence: create PostRecurrence + lookahead instances ──────────
+      if (input.recurrence && input.scheduledAt) {
+        const { type, daysOfWeek, dayOfMonth, endDate, maxOccurrences } = input.recurrence;
+
+        const recurrence = await ctx.db.postRecurrence.create({
+          data: {
+            postId: post.id,
+            recurrenceType: type.toUpperCase(),
+            daysOfWeek: daysOfWeek ?? [],
+            dayOfMonth: dayOfMonth ?? null,
+            timeOfDay: `${String(input.scheduledAt.getHours()).padStart(2, "0")}:${String(input.scheduledAt.getMinutes()).padStart(2, "0")}`,
+            startsAt: input.scheduledAt,
+            endsAt: endDate ?? null,
+            isActive: true,
+            maxOccurrences: maxOccurrences ?? null,
+          },
+        });
+
+        // Generate lookahead instances (next 12 occurrences)
+        const instances = generateRecurrenceInstances({
+          recurrenceType: type.toUpperCase() as "DAILY" | "WEEKLY" | "MONTHLY",
+          daysOfWeek: daysOfWeek ?? [],
+          startsAt: input.scheduledAt,
+          endsAt: endDate,
+          timeOfDay: recurrence.timeOfDay,
+          count: 12,
+        });
+
+        if (instances.length > 0) {
+          await ctx.db.postRecurrenceInstance.createMany({
+            data: instances.map((scheduledFor) => ({
+              recurrenceId: recurrence.id,
+              scheduledFor,
+              status: "PENDING",
+            })),
+          });
+
+          await ctx.db.postRecurrence.update({
+            where: { id: recurrence.id },
+            data: { occurrencesGenerated: instances.length, lastGeneratedAt: new Date() },
+          });
+        }
+      }
 
       // Broadcast real-time event
       void broadcastEvent(ctx.db, {

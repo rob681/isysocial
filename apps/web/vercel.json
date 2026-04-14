@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/post-insights",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/post-recurrence",
+      "schedule": "0 7 * * *"
     }
   ]
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Plus, Minus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RecurrencePreview } from "./recurrence-preview";
 
 export interface RepeatConfig {
   type: "once" | "daily" | "weekly" | "monthly";
@@ -375,6 +376,15 @@ export function CalendarScheduler({
               </div>
             )}
           </div>
+
+          {/* Recurrence Preview */}
+          {repeatType !== "once" && (
+            <RecurrencePreview
+              startDate={(() => { const d = new Date(selectedDate); d.setHours(hours, minutes, 0, 0); return d; })()}
+              repeatConfig={{ type: repeatType, endDate: repeatEndDate, daysOfWeek: selectedWeekDays.length ? selectedWeekDays : undefined }}
+              maxToShow={8}
+            />
+          )}
 
           {/* Actions */}
           <div className="flex gap-2 pt-4 border-t">
