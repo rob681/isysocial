@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { trpc } from "@/lib/trpc/client";
 import type { PostType } from "@isysocial/shared";
 import { validateMedia as validateMediaFormat, type ValidationResult } from "@/lib/media-formats";
+import { extractCanvasThumbnail } from "@/lib/canvas-thumbnail";
 import {
   DndContext,
   closestCenter,
@@ -34,6 +35,7 @@ interface UploadedFile {
   fileName: string;
   mimeType: string;
   fileSize: number;
+  thumbnailUrl?: string;
 }
 
 interface MediaUploaderProps {
@@ -92,12 +94,16 @@ function SortableMediaItem({
       <div className="flex items-center gap-3 p-2">
         <div className="relative w-16 h-16 flex-shrink-0 rounded-md overflow-hidden bg-zinc-100 dark:bg-zinc-800">
           {file.mimeType.startsWith("video/") ? (
-            <video
-              src={file.url}
-              className="w-full h-full object-cover"
-              preload="metadata"
-              muted
-            />
+            // Show thumbnail if available, otherwise show play icon overlay
+            <div className="relative w-full h-full">
+              {file.thumbnailUrl ? (
+                <img src={file.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center">
+                  <Play className="h-6 w-6 text-white fill-white" />
+                </div>
+              )}
+            </div>
           ) : (
             <img src={file.url} alt="" className="w-full h-full object-cover" />
           )}
@@ -190,12 +196,45 @@ export function MediaUploader({
       throw new Error("Error al subir archivo a almacenamiento");
     }
 
+    let thumbnailUrl: string | undefined;
+
+    // Extract thumbnail for videos
+    if (file.type.startsWith("video/")) {
+      try {
+        setUploadProgress(`Generando miniatura para ${file.name}...`);
+        const { blob } = await extractCanvasThumbnail(file);
+
+        // Upload thumbnail
+        const thumbFileName = fileName.replace(/\.[^.]+$/, '-thumb.jpg');
+        const { signedUrl: thumbSignedUrl, publicUrl: thumbPublicUrl } =
+          await getUploadUrl.mutateAsync({
+            fileName: thumbFileName,
+            mimeType: "image/jpeg",
+            folder: "thumbnails",
+          });
+
+        const thumbResponse = await fetch(thumbSignedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "image/jpeg" },
+          body: blob,
+        });
+
+        if (thumbResponse.ok) {
+          thumbnailUrl = thumbPublicUrl;
+        }
+      } catch (err) {
+        console.warn("Failed to extract video thumbnail:", err);
+        // Continue without thumbnail
+      }
+    }
+
     return {
       url: publicUrl,
       storagePath,
       fileName: file.name,
       mimeType: file.type,
       fileSize: file.size,
+      thumbnailUrl,
     };
   };
 
@@ -216,12 +255,41 @@ export function MediaUploader({
     }
 
     const data = await response.json();
+    let thumbnailUrl: string | undefined;
+
+    // Extract thumbnail for videos
+    if (file.type.startsWith("video/")) {
+      try {
+        setUploadProgress(`Generando miniatura para ${file.name}...`);
+        const { blob } = await extractCanvasThumbnail(file);
+
+        // Upload thumbnail via API
+        const thumbFormData = new FormData();
+        thumbFormData.append("file", blob);
+        thumbFormData.append("folder", "thumbnails");
+
+        const thumbResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: thumbFormData,
+        });
+
+        if (thumbResponse.ok) {
+          const thumbData = await thumbResponse.json();
+          thumbnailUrl = thumbData.url;
+        }
+      } catch (err) {
+        console.warn("Failed to extract video thumbnail:", err);
+        // Continue without thumbnail
+      }
+    }
+
     return {
       url: data.url,
       storagePath: data.storagePath,
       fileName: data.fileName,
       mimeType: data.mimeType,
       fileSize: data.fileSize,
+      thumbnailUrl,
     };
   };
 

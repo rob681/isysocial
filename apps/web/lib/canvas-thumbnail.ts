@@ -16,10 +16,11 @@ function isFrameValid(imageData: ImageData): boolean {
     const b = data[i + 2];
     const a = data[i + 3];
 
-    // Pixel has actual content if not completely transparent and not pure white
-    if (a > 200) {
+    // Pixel has actual content if not completely transparent
+    if (a > 128) {
       const brightness = (r + g + b) / 3;
-      if (brightness > 10 && brightness < 245) {
+      // Accept any pixel that's not pure white/black (very lenient)
+      if (brightness > 5 && brightness < 250) {
         contentBytes++;
       }
     }
@@ -30,7 +31,7 @@ function isFrameValid(imageData: ImageData): boolean {
   return contentBytes > totalPixels * 0.01;
 }
 
-function createPlaceholder(width: number, height: number): Canvas {
+function createPlaceholder(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -123,8 +124,9 @@ export async function extractCanvasThumbnail(
       // Set timeout for this specific seek
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        handleError(new Error(`Video seek timeout after ${seekAttempts} attempts`));
-      }, 3000);
+        // Timeout on seek - try next frame or fallback to placeholder
+        tryNextFrame();
+      }, 5000);
     };
 
     video.onloadedmetadata = () => {
