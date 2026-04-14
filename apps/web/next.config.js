@@ -1,4 +1,5 @@
 const path = require("path");
+const { withSentryConfig } = require("@sentry/nextjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -39,7 +40,7 @@ const nextConfig = {
       // Social network CDNs for media previews
       "img-src 'self' data: blob: https://*.supabase.co https://*.cdninstagram.com https://*.fbcdn.net https://media.giphy.com https://media0.giphy.com https://media1.giphy.com https://media2.giphy.com https://media3.giphy.com https://media4.giphy.com https://lh3.googleusercontent.com",
       // Social network APIs + Giphy
-      "connect-src 'self' https://*.supabase.co https://api.stripe.com https://api.giphy.com https://graph.facebook.com https://graph.instagram.com https://api.twitter.com https://api.x.com https://api.linkedin.com https://www.googleapis.com https://vitals.vercel-insights.com",
+      "connect-src 'self' https://*.supabase.co https://api.stripe.com https://api.giphy.com https://graph.facebook.com https://graph.instagram.com https://api.twitter.com https://api.x.com https://api.linkedin.com https://www.googleapis.com https://vitals.vercel-insights.com https://*.sentry.io https://o*.ingest.sentry.io",
       // Stripe payment iframe
       "frame-src https://js.stripe.com https://hooks.stripe.com https://www.google.com",
       // Allow media from Supabase and blob for video editor
@@ -96,4 +97,9 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, {
+  silent: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});

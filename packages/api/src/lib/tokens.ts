@@ -2,11 +2,13 @@ import crypto from "crypto";
 import type { PrismaClient } from "@isysocial/db";
 
 const TOKEN_EXPIRY = {
-  INVITATION: 48 * 60 * 60 * 1000, // 48 hours
-  PASSWORD_RESET: 1 * 60 * 60 * 1000, // 1 hour
+  INVITATION: 48 * 60 * 60 * 1000,          // 48 hours
+  PASSWORD_RESET: 1 * 60 * 60 * 1000,       // 1 hour
+  EMAIL_VERIFICATION: 24 * 60 * 60 * 1000,  // 24 hours
+  MFA_SETUP: 10 * 60 * 1000,                // 10 minutes
 } as const;
 
-type TokenType = "INVITATION" | "PASSWORD_RESET";
+type TokenType = "INVITATION" | "PASSWORD_RESET" | "EMAIL_VERIFICATION" | "MFA_SETUP";
 
 export function generateSecureToken(): string {
   return crypto.randomBytes(32).toString("hex");

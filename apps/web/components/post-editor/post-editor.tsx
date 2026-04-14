@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { AiAssistant } from "./ai-assistant";
 import { SchedulePopover } from "./schedule-popover";
+import { CalendarScheduler } from "./calendar-scheduler";
 import { getFormatRequirements } from "@/lib/media-formats";
 import { VideoEditor as VideoEditorComponent } from "@/components/video-editor/video-editor";
 
@@ -77,6 +78,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
   const [isycineOpen, setIsycineOpen] = useState(false);
   const [isycineVideoUrl, setIsycineVideoUrl] = useState<string | null>(null);
   const [isycineFileName, setIsycineFileName] = useState<string>("");
+  const [showCalendarScheduler, setShowCalendarScheduler] = useState(false);
 
   const { data: clients } = trpc.posts.getClientsForSelect.useQuery();
   const { data: categories } = trpc.categories.list.useQuery();
@@ -104,7 +106,8 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
           ? "Enviada para aprobación del cliente."
           : "El borrador se guardó correctamente.",
       });
-      router.push("/admin/contenido");
+      const clientId = watchedValues.clientId;
+      router.push(`/cliente/${clientId}/contenido/${data.id}`);
     },
     onError: (err) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -764,12 +767,19 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
 
           {/* Schedule & Limits */}
           <div className="grid grid-cols-2 gap-4">
-            <SchedulePopover
-              value={watchedValues.scheduledAt || ""}
-              onChange={(v) => form.setValue("scheduledAt", v)}
-              network={watchedValues.network}
-              clientId={watchedValues.clientId}
-            />
+            <div className="space-y-2">
+              <Label>Fecha programada</Label>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start text-left"
+                onClick={() => setShowCalendarScheduler(true)}
+              >
+                {watchedValues.scheduledAt
+                  ? new Date(watchedValues.scheduledAt).toLocaleString("es-ES")
+                  : "Selecciona una fecha"}
+              </Button>
+            </div>
             {!postId && (
               <div className="space-y-2">
                 <Label>Límite de revisiones</Label>
@@ -820,6 +830,19 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
           </div>
         
     </form>
+
+      {/* Calendar Scheduler Modal */}
+      {showCalendarScheduler && (
+        <CalendarScheduler
+          value={watchedValues.scheduledAt ? new Date(watchedValues.scheduledAt) : undefined}
+          onChange={(date) => {
+            // Convert Date to ISO string format for form
+            const isoString = date.toISOString().split('T')[0] + 'T' + String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+            form.setValue("scheduledAt", isoString);
+          }}
+          onClose={() => setShowCalendarScheduler(false)}
+        />
+      )}
 
       {/* Isycine Studio v2 — Full-screen Video Editor (OUTSIDE form to prevent submit) */}
       {isycineOpen && isycineVideoUrl && (
@@ -878,6 +901,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
           clientId={watchedValues.clientId}
           mediaUrls={finalMockupMedia.map((m) => m.url)}
           currentCopy={watchedValues.copy}
+          postType={watchedValues.postType as PostType}
           onInsert={(text) => {
             // Split text into copy and hashtags
             const hashtagMatch = text.match(/((?:#\w+\s*)+)$/);

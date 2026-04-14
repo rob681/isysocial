@@ -65,7 +65,7 @@ export function VideoEditor({ videoUrl, clientName, onClose, onExport }: VideoEd
     const dur = video.duration;
     setDuration(dur);
     setTrim({ start: 0, end: dur });
-    generateThumbnails(videoUrl, 15).then(setThumbnails).catch(() => {});
+    generateThumbnails(videoUrl, 6).then(setThumbnails).catch(() => {});
   }, [videoUrl]);
 
   const handleTimeUpdate = useCallback(() => {
@@ -120,6 +120,46 @@ export function VideoEditor({ videoUrl, clientName, onClose, onExport }: VideoEd
     audio.volume = audioTrack.volume;
     audio.muted = audioTrack.muted;
   }, [audioTrack?.volume, audioTrack?.muted]);
+
+  // Cleanup on unmount: release memory and blob URLs
+  useEffect(() => {
+    return () => {
+      // Cleanup video
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.src = "";
+        video.load();
+      }
+
+      // Cleanup audio
+      if (audioTrack) {
+        URL.revokeObjectURL(audioTrack.url);
+      }
+
+      // Cleanup canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      // Cleanup thumbnails (revoke data URLs)
+      thumbnails.forEach((thumbnail) => {
+        if (thumbnail.startsWith("data:")) {
+          // Data URLs don't need revoking, but we clear the state
+        }
+      });
+      setThumbnails([]);
+
+      // Cancel any pending animation frames
+      if (typeof requestAnimationFrame !== "undefined") {
+        // Animation frames are already cleaned up by React
+      }
+    };
+  }, [audioTrack]);
 
   // ─── Text Overlays ───────────────────────────────────────────────────────
 

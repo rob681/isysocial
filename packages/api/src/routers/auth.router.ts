@@ -10,26 +10,7 @@ import {
 } from "@isysocial/shared";
 import { validateToken, createToken } from "../lib/tokens";
 import { sendEmailNotification } from "../lib/email";
-
-const resetRequestCounts = new Map<string, { count: number; resetAt: number }>();
-const MAX_RESET_REQUESTS = 3;
-const RESET_WINDOW_MS = 15 * 60 * 1000;
-
-const registerRequestCounts = new Map<string, { count: number; resetAt: number }>();
-const MAX_REGISTER_REQUESTS = 5;
-const REGISTER_WINDOW_MS = 60 * 60 * 1000;
-
-function checkResetRateLimit(email: string): boolean {
-  const now = Date.now();
-  const entry = resetRequestCounts.get(email);
-  if (!entry || now > entry.resetAt) {
-    resetRequestCounts.set(email, { count: 1, resetAt: now + RESET_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_RESET_REQUESTS) return false;
-  entry.count++;
-  return true;
-}
+import { checkRateLimit } from "../lib/rate-limit";
 
 export const authRouter = router({
   validateToken: publicProcedure
@@ -81,7 +62,14 @@ export const authRouter = router({
   requestReset: publicProcedure
     .input(resetPasswordRequestSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!checkResetRateLimit(input.email)) return { success: true };
+      // DB-backed rate limiting: 3 reset attempts per 15 minutes
+      const allowed = await checkRateLimit(
+        ctx.db,
+        `reset:${input.email.toLowerCase()}`,
+        3,
+        15 * 60 * 1000
+      );
+      if (!allowed) return { success: true }; // silent fail — don't expose rate limit info
 
       const user = await ctx.db.user.findUnique({
         where: { email: input.email },
@@ -138,21 +126,18 @@ export const authRouter = router({
   registerAgency: publicProcedure
     .input(registerAgencySchema)
     .mutation(async ({ ctx, input }) => {
-      const now = Date.now();
-      const entry = registerRequestCounts.get(input.email);
-      if (entry && now < entry.resetAt && entry.count >= MAX_REGISTER_REQUESTS) {
+      // DB-backed rate limiting: 5 registrations per hour per email
+      const allowed = await checkRateLimit(
+        ctx.db,
+        `register:${input.email.toLowerCase()}`,
+        5,
+        60 * 60 * 1000
+      );
+      if (!allowed) {
         throw new TRPCError({
           code: "TOO_MANY_REQUESTS",
           message: "Demasiados intentos. Intenta de nuevo más tarde.",
         });
-      }
-      if (!entry || now > (entry?.resetAt ?? 0)) {
-        registerRequestCounts.set(input.email, {
-          count: 1,
-          resetAt: now + REGISTER_WINDOW_MS,
-        });
-      } else {
-        entry.count++;
       }
 
       const existingUser = await ctx.db.user.findUnique({
@@ -200,6 +185,7 @@ export const authRouter = router({
             passwordHash,
             role: "ADMIN",
             agencyId: agency.id,
+            emailVerified: false,  // Must verify email before login
           },
         });
 
@@ -207,16 +193,86 @@ export const authRouter = router({
       });
 
       const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+
+      // Send email verification (required before login)
+      const verifyToken = await createToken(ctx.db, result.user.id, "EMAIL_VERIFICATION");
+      const verifyUrl = `${baseUrl}/verificar-email?token=${verifyToken}`;
+
       sendEmailNotification({
         db: ctx.db,
         to: input.email,
-        subject: "Bienvenido a Isysocial — Tu agencia está lista",
-        title: "¡Bienvenido a Isysocial!",
-        body: `Hola ${input.adminName},<br><br>Tu agencia <strong>${input.agencyName}</strong> ha sido creada exitosamente. Tu prueba gratuita de 14 días comienza hoy.<br><br>Inicia sesión para empezar a gestionar tu contenido.`,
-        actionUrl: `${baseUrl}/login`,
-        actionLabel: "Iniciar sesión",
+        subject: "Verifica tu correo — Isysocial",
+        title: "Verifica tu correo electrónico",
+        body: `Hola ${input.adminName},<br><br>Tu agencia <strong>${input.agencyName}</strong> ha sido creada exitosamente. Para activar tu cuenta y acceder a la plataforma, verifica tu correo electrónico.<br><br>Este enlace expira en 24 horas.`,
+        actionUrl: verifyUrl,
+        actionLabel: "Verificar mi correo",
       }).catch(console.error);
 
       return { success: true, email: input.email, slug: result.agency.slug };
+    }),
+
+  verifyEmail: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const token = await validateToken(ctx.db, input.token, "EMAIL_VERIFICATION");
+      if (!token) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "El enlace de verificación es inválido o ha expirado.",
+        });
+      }
+
+      await ctx.db.$transaction([
+        ctx.db.user.update({
+          where: { id: token.user.id },
+          data: {
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+          },
+        }),
+        ctx.db.token.update({
+          where: { id: token.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+
+      return { success: true, email: token.user.email };
+    }),
+
+  resendVerification: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      // Rate limit resend: 3 per hour
+      const allowed = await checkRateLimit(
+        ctx.db,
+        `verify-resend:${input.email.toLowerCase()}`,
+        3,
+        60 * 60 * 1000
+      );
+      if (!allowed) return { success: true };
+
+      const user = await ctx.db.user.findUnique({
+        where: { email: input.email },
+        select: { id: true, name: true, email: true, emailVerified: true, isActive: true },
+      });
+
+      // Silent fail if user not found or already verified
+      if (!user || user.emailVerified || !user.isActive) return { success: true };
+
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const verifyToken = await createToken(ctx.db, user.id, "EMAIL_VERIFICATION");
+      const verifyUrl = `${baseUrl}/verificar-email?token=${verifyToken}`;
+
+      await sendEmailNotification({
+        db: ctx.db,
+        to: user.email,
+        subject: "Verifica tu correo — Isysocial",
+        title: "Verifica tu correo electrónico",
+        body: `Hola ${user.name},<br><br>Haz clic en el botón de abajo para verificar tu correo y activar tu cuenta de Isysocial.<br><br>Este enlace expira en 24 horas.`,
+        actionUrl: verifyUrl,
+        actionLabel: "Verificar mi correo",
+      });
+
+      return { success: true };
     }),
 });

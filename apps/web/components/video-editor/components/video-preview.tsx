@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Play, Move } from "lucide-react";
 import type { TextOverlay, StickerOverlay, VideoFilter } from "../types";
 import { buildCssFilterString } from "../utils";
+import { LRUCache } from "@/lib/lru-cache";
 
 interface VideoPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -26,8 +27,8 @@ interface VideoPreviewProps {
   onMoveSticker: (id: string, x: number, y: number) => void;
 }
 
-// Pre-load sticker images
-const stickerImageCache = new Map<string, HTMLImageElement>();
+// Pre-load sticker images (LRU cache to prevent unbounded growth)
+const stickerImageCache = new LRUCache<string, HTMLImageElement>(50);
 
 function loadStickerImage(url: string): HTMLImageElement | null {
   if (stickerImageCache.has(url)) return stickerImageCache.get(url)!;

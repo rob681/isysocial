@@ -28,6 +28,8 @@ enum Role {
 enum TokenType {
   INVITATION
   PASSWORD_RESET
+  EMAIL_VERIFICATION
+  MFA_SETUP
 
   @@schema("isysocial")
 }
@@ -218,6 +220,10 @@ model User {
   isActive            Boolean  @default(true)
   onboardingCompleted Boolean  @default(false)
   fcmTokens           String[] @default([])
+
+  // Email verification
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
 
   // Account lockout
   loginAttempts Int       @default(0)
@@ -997,6 +1003,20 @@ model RealtimeEvent {
 
   @@index([agencyId, createdAt])
   @@map("iso_realtime_events")
+  @@schema("isysocial")
+}
+
+// ─── RATE LIMIT RECORDS ───────────────────────────────────────────────────────
+// Persistent rate limiting that survives server restarts and multi-instance deployments.
+
+model RateLimitRecord {
+  id        String   @id @default(cuid())
+  key       String   @unique  // e.g. "reset:user@email.com", "register:1.2.3.4"
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("iso_rate_limit_records")
   @@schema("isysocial")
 }
 

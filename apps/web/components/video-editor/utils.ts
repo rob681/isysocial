@@ -1,5 +1,6 @@
 import type { VideoFilter, TextOverlay, StickerOverlay, TrimRange, AudioTrack } from "./types";
 import { DEFAULT_FILTER } from "./constants";
+import { LRUCache } from "@/lib/lru-cache";
 
 // ─── Format Time ───────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ export function getDefaultFilter(): VideoFilter {
 
 // ─── Generate Thumbnails ───────────────────────────────────────────────────
 
-export async function generateThumbnails(videoUrl: string, count: number = 15): Promise<string[]> {
+export async function generateThumbnails(videoUrl: string, count: number = 6): Promise<string[]> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     video.crossOrigin = "anonymous";
@@ -94,8 +95,8 @@ interface RenderParams {
   onProgress?: (pct: number) => void;
 }
 
-// Pre-load sticker images for export
-const exportStickerCache = new Map<string, HTMLImageElement>();
+// Pre-load sticker images for export (LRU cache to prevent unbounded growth)
+const exportStickerCache = new LRUCache<string, HTMLImageElement>(50);
 
 function preloadStickerImages(stickers: StickerOverlay[]): Promise<void> {
   const promises = stickers.map((s) => {
