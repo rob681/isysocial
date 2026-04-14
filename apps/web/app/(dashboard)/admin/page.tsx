@@ -32,13 +32,25 @@ import type { SocialNetwork, PostStatus } from "@isysocial/shared";
 // ── Pipeline colors ──────────────────────────────────────────────────────────
 const STATUS_PIPELINE_COLORS: Record<string, string> = {
   DRAFT: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
-  IN_REVIEW: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+  IN_REVIEW: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
   CLIENT_CHANGES: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
   APPROVED: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
-  SCHEDULED: "bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300",
-  PUBLISHED: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300",
-  PAUSED: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
+  SCHEDULED: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+  PUBLISHED: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  PAUSED: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300",
   CANCELLED: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300",
+};
+
+// ── Pipeline bar hex colors (for style prop — Tailwind classes don't work in style) ──
+const STATUS_PIPELINE_HEX: Record<string, string> = {
+  DRAFT: "#94a3b8",
+  IN_REVIEW: "#facc15",
+  CLIENT_CHANGES: "#fb923c",
+  APPROVED: "#22c55e",
+  SCHEDULED: "#3b82f6",
+  PUBLISHED: "#10b981",
+  PAUSED: "#a855f7",
+  CANCELLED: "#ef4444",
 };
 
 function StatCard({
@@ -49,6 +61,7 @@ function StatCard({
   href,
   colorClass,
   subtitle,
+  accentColor,
 }: {
   title: string;
   value: number | undefined;
@@ -57,10 +70,14 @@ function StatCard({
   href?: string;
   colorClass: string;
   subtitle?: string;
+  accentColor?: string;
 }) {
   const content = (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="pt-5 pb-4">
+    <Card className="shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group">
+      {accentColor && (
+        <div className="h-1 w-full transition-all duration-200 group-hover:h-1.5" style={{ background: accentColor }} />
+      )}
+      <CardContent className="pt-4 pb-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">{title}</p>
@@ -113,8 +130,8 @@ export default function AdminDashboardPage() {
     <div className="flex flex-col flex-1">
       <Topbar title="Dashboard" />
       <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
-        {/* Welcome */}
-        <div className="flex items-center justify-between">
+        {/* Welcome banner */}
+        <div className="rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/10 px-6 py-5 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Panel de control</h1>
             <p className="text-muted-foreground mt-1">
@@ -138,6 +155,7 @@ export default function AdminDashboardPage() {
             loading={isLoading}
             href="/admin/clientes"
             colorClass="bg-blue-100 dark:bg-blue-950"
+            accentColor="#2563eb"
           />
           <StatCard
             title="Editores"
@@ -146,6 +164,7 @@ export default function AdminDashboardPage() {
             loading={isLoading}
             href="/admin/equipo"
             colorClass="bg-emerald-100 dark:bg-emerald-950"
+            accentColor="#059669"
           />
           <StatCard
             title="Posts totales"
@@ -154,6 +173,7 @@ export default function AdminDashboardPage() {
             loading={isLoading}
             href="/admin/contenido"
             colorClass="bg-purple-100 dark:bg-purple-950"
+            accentColor="#9333ea"
           />
           <StatCard
             title="Por aprobar"
@@ -162,6 +182,7 @@ export default function AdminDashboardPage() {
             loading={isLoading}
             href="/admin/aprobaciones"
             colorClass="bg-amber-100 dark:bg-amber-950"
+            accentColor="#d97706"
           />
           <StatCard
             title="Este mes"
@@ -170,6 +191,7 @@ export default function AdminDashboardPage() {
             loading={isLoading}
             colorClass="bg-cyan-100 dark:bg-cyan-950"
             subtitle="publicados"
+            accentColor="#0891b2"
           />
         </div>
 
@@ -201,20 +223,23 @@ export default function AdminDashboardPage() {
                       const pct = total > 0 ? Math.round((count / total) * 100) : 0;
 
                       return (
-                        <div key={status} className="flex items-center gap-3">
-                          <span className={`text-xs font-medium px-2 py-1 rounded-md min-w-[120px] text-center ${STATUS_PIPELINE_COLORS[status]}`}>
+                        <div key={status} className="flex items-center gap-3 group">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-md min-w-[130px] text-center ${STATUS_PIPELINE_COLORS[status]}`}>
                             {POST_STATUS_LABELS[status as PostStatus]}
                           </span>
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
                             <div
-                              className="h-full rounded-full transition-all duration-500"
+                              className="h-full rounded-full transition-all duration-700 ease-out"
                               style={{
                                 width: `${pct}%`,
-                                backgroundColor: POST_STATUS_COLORS[status as PostStatus] || "#94a3b8",
+                                backgroundColor: STATUS_PIPELINE_HEX[status] || "#94a3b8",
                               }}
                             />
                           </div>
-                          <span className="text-sm font-medium w-10 text-right">{count}</span>
+                          <div className="flex items-center gap-1.5 w-16 justify-end">
+                            <span className="text-sm font-bold tabular-nums">{count}</span>
+                            {pct > 0 && <span className="text-xs text-muted-foreground">{pct}%</span>}
+                          </div>
                         </div>
                       );
                     }
@@ -481,54 +506,58 @@ export default function AdminDashboardPage() {
           <h2 className="text-lg font-semibold mb-3">Acciones rápidas</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Link href="/admin/clientes">
-              <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+              <Card className="shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2.5 rounded-full bg-blue-100 dark:bg-blue-950">
+                  <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950 group-hover:bg-blue-200 dark:group-hover:bg-blue-900 transition-colors">
                     <UserCircle className="h-5 w-5 text-blue-600" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-sm">Clientes</h3>
                     <p className="text-xs text-muted-foreground">Gestionar cuentas</p>
                   </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                 </CardContent>
               </Card>
             </Link>
             <Link href="/admin/equipo">
-              <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+              <Card className="shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-950">
+                  <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900 transition-colors">
                     <Users className="h-5 w-5 text-emerald-600" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-sm">Equipo</h3>
                     <p className="text-xs text-muted-foreground">Editores y permisos</p>
                   </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                 </CardContent>
               </Card>
             </Link>
             <Link href="/admin/contenido/nuevo">
-              <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+              <Card className="shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2.5 rounded-full bg-purple-100 dark:bg-purple-950">
+                  <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-950 group-hover:bg-purple-200 dark:group-hover:bg-purple-900 transition-colors">
                     <Plus className="h-5 w-5 text-purple-600" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-sm">Nuevo post</h3>
                     <p className="text-xs text-muted-foreground">Crear contenido</p>
                   </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                 </CardContent>
               </Card>
             </Link>
             <Link href="/admin/aprobaciones">
-              <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+              <Card className="shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2.5 rounded-full bg-amber-100 dark:bg-amber-950">
+                  <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950 group-hover:bg-amber-200 dark:group-hover:bg-amber-900 transition-colors">
                     <Eye className="h-5 w-5 text-amber-600" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-sm">Aprobaciones</h3>
                     <p className="text-xs text-muted-foreground">Cola de revisión</p>
                   </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                 </CardContent>
               </Card>
             </Link>

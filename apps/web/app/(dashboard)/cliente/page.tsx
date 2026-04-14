@@ -76,12 +76,20 @@ export default function ClienteDashboardPage() {
     <div className="flex flex-col flex-1">
       <Topbar title="Dashboard" />
       <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
-      {/* Welcome */}
-      <div>
+      {/* Welcome banner */}
+      <div className="rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/10 px-6 py-5">
         <h1 className="text-2xl font-bold">Bienvenido, {name} 👋</h1>
         <p className="text-muted-foreground mt-1">
           Aquí encontrarás el contenido de redes sociales preparado por tu agencia
         </p>
+        {pendingCount > 0 && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className="inline-flex items-center gap-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-sm font-medium px-3 py-1 rounded-full">
+              <AlertCircle className="h-4 w-4" />
+              {pendingCount} publicación{pendingCount > 1 ? "es" : ""} esperan tu revisión
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -326,46 +334,52 @@ export default function ClienteDashboardPage() {
       {/* Quick links */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link href="/cliente/calendario">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+          <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
             <CardContent className="p-5 flex items-center gap-4">
-              <Calendar className="h-8 w-8 text-primary/60" />
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 dark:group-hover:bg-blue-950/60 transition-colors">
+                <Calendar className="h-5 w-5 text-blue-600" />
+              </div>
               <div>
                 <h3 className="font-semibold">Calendario editorial</h3>
                 <p className="text-sm text-muted-foreground">
                   Vista mensual de contenidos
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" />
+              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
             </CardContent>
           </Card>
         </Link>
 
         <Link href="/cliente/contenido">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+          <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
             <CardContent className="p-5 flex items-center gap-4">
-              <FileImage className="h-8 w-8 text-primary/60" />
+              <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/40 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-200 dark:group-hover:bg-purple-950/60 transition-colors">
+                <FileImage className="h-5 w-5 text-purple-600" />
+              </div>
               <div>
                 <h3 className="font-semibold">Todas mis publicaciones</h3>
                 <p className="text-sm text-muted-foreground">
                   Historial completo
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" />
+              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
             </CardContent>
           </Card>
         </Link>
 
         <Link href="/cliente/marca">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+          <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full group">
             <CardContent className="p-5 flex items-center gap-4">
-              <Palette className="h-8 w-8 text-primary/60" />
+              <div className="w-10 h-10 rounded-xl bg-pink-100 dark:bg-pink-950/40 flex items-center justify-center flex-shrink-0 group-hover:bg-pink-200 dark:group-hover:bg-pink-950/60 transition-colors">
+                <Palette className="h-5 w-5 text-pink-600" />
+              </div>
               <div>
                 <h3 className="font-semibold">Mi Marca</h3>
                 <p className="text-sm text-muted-foreground">
                   Identidad visual y tono
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" />
+              <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
             </CardContent>
           </Card>
         </Link>

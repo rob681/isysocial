@@ -42,6 +42,7 @@ import {
   Download,
   Film,
   Users,
+  Play,
 } from "lucide-react";
 import {
   NETWORK_LABELS,
@@ -573,19 +574,33 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
                 grouped.push({ primary: post, mirrors: [post] });
               }
             }
+
+            const STATUS_BORDER: Record<string, string> = {
+              DRAFT: "border-l-gray-300 dark:border-l-gray-600",
+              IN_REVIEW: "border-l-yellow-400",
+              CLIENT_CHANGES: "border-l-orange-400",
+              APPROVED: "border-l-green-500",
+              SCHEDULED: "border-l-blue-500",
+              PUBLISHED: "border-l-emerald-500",
+              PAUSED: "border-l-purple-400",
+              CANCELLED: "border-l-red-400",
+            };
+
             return grouped.map(({ primary: post, mirrors }) => {
             const statusColor = POST_STATUS_COLORS[post.status as PostStatus] || "";
             const networkColor = NETWORK_COLORS[post.network as SocialNetwork] || "#888";
             const thumbnail = post.media?.[0]?.fileUrl;
+            const isVideo = post.media?.[0]?.mimeType?.startsWith("video/");
             const isSelected = selectedIds.has(post.id);
+            const borderClass = STATUS_BORDER[post.status] ?? "border-l-gray-200";
 
             return (
               <Card
                 key={post.id}
-                className={`hover:shadow-md transition-all cursor-pointer ${isSelected ? "ring-2 ring-primary bg-primary/5" : ""}`}
+                className={`hover:shadow-md transition-all cursor-pointer border-l-4 ${borderClass} ${isSelected ? "ring-2 ring-primary bg-primary/5" : ""}`}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
                     {/* Checkbox */}
                     <button
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(post.id); }}
@@ -599,12 +614,19 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
                     </button>
 
                     {/* Thumbnail */}
-                    <Link href={`/admin/contenido/${post.id}`} className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="w-16 h-16 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <Link href={`/admin/contenido/${post.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="relative w-16 h-20 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {thumbnail ? (
                           <img src={thumbnail} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <FileImage className="h-6 w-6 text-muted-foreground/40" />
+                        )}
+                        {isVideo && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <div className="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center">
+                              <Play className="h-3 w-3 text-zinc-700 ml-0.5" />
+                            </div>
+                          </div>
                         )}
                       </div>
 
