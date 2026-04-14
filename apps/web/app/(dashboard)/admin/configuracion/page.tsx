@@ -730,6 +730,112 @@ const TIMEZONES = [
   { value: "Europe/London", label: "Londres (GMT+0)" },
 ];
 
+/* ─── MetaApiTestSection ─────────────────────────────────────────── */
+function MetaApiTestSection() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<any>(null);
+
+  const runTests = async () => {
+    setLoading(true);
+    setResults(null);
+    try {
+      const res = await fetch("/api/social/meta/test-calls");
+      const data = await res.json();
+      setResults(data);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FlaskConical className="h-5 w-5 text-primary" />
+          Pruebas obligatorias — Meta Graph API
+        </CardTitle>
+        <CardDescription>
+          Ejecuta las llamadas requeridas por Meta App Review para demostrar el uso de cada permiso.
+          Toma una captura o graba la pantalla para incluir en la revisión.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button onClick={runTests} disabled={loading} variant="outline">
+          {loading ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-2" />Ejecutando pruebas...</>
+          ) : (
+            <><FlaskConical className="h-4 w-4 mr-2" />Ejecutar llamadas de prueba</>
+          )}
+        </Button>
+
+        {results && (
+          <div className="space-y-3">
+            {/* Summary */}
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-green-600 font-medium">✓ {results.summary?.passed} exitosas</span>
+              <span className="text-red-500 font-medium">✗ {results.summary?.failed} fallidas</span>
+              {results.summary?.skipped > 0 && (
+                <span className="text-muted-foreground">— {results.summary?.skipped} omitidas</span>
+              )}
+            </div>
+
+            {/* Accounts info */}
+            {results.meta && (
+              <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 space-y-1">
+                <p>Cuenta Facebook: {results.meta.fbAccount?.name ?? "No conectada"} {results.meta.fbAccount?.pageId && `(Page ID: ${results.meta.fbAccount.pageId})`}</p>
+                <p>Cuenta Instagram: {results.meta.igAccount?.name ?? "No conectada"} {results.meta.igAccount?.id && `(IG ID: ${results.meta.igAccount.id})`}</p>
+                <p className="text-muted-foreground/60">Ejecutado: {results.meta.testedAt}</p>
+              </div>
+            )}
+
+            {/* Error if no accounts */}
+            {results.error && (
+              <p className="text-sm text-red-500">{results.error}</p>
+            )}
+
+            {/* Results list */}
+            {(results.results ?? []).map((r: any, i: number) => (
+              <div key={i} className="border rounded-lg p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  {r.status === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  ) : r.status === "error" ? (
+                    <X className="h-4 w-4 text-red-500 flex-shrink-0" />
+                  ) : (
+                    <span className="w-4 h-4 text-muted-foreground text-xs flex-shrink-0">—</span>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-xs font-mono">{r.permission}</Badge>
+                      {r.httpStatus && (
+                        <span className={`text-xs font-medium ${r.httpStatus >= 200 && r.httpStatus < 300 ? "text-green-600" : "text-red-500"}`}>
+                          HTTP {r.httpStatus}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{r.method} {r.endpoint}</p>
+                  </div>
+                </div>
+                {r.data && (
+                  <pre className="text-xs bg-muted/50 rounded p-2 overflow-x-auto max-h-32">
+                    {JSON.stringify(r.data, null, 2)}
+                  </pre>
+                )}
+                {r.error && (
+                  <p className="text-xs text-red-500">{r.error}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ─── ConfiguracionPage ──────────────────────────────────────────── */
 export default function ConfiguracionPage() {
   return (
@@ -963,6 +1069,9 @@ function ConfiguracionContent() {
 
             {/* Email / Resend Settings */}
             <EmailSettingsSection />
+
+            {/* Meta Graph API Test Calls */}
+            <MetaApiTestSection />
 
             {/* Categories */}
             <CategoriesSection />
