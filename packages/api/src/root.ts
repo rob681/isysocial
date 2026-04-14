@@ -25,6 +25,7 @@ import { ecosystemRouter } from "./routers/ecosystem.router";
 import { socialInsightsRouter } from "./routers/socialInsights.router";
 import { clientContactsRouter } from "./routers/clientContacts.router";
 import { dayThemesRouter } from "./routers/dayThemes.router";
+import { emailRouter } from "./routers/email.router";
 
 export const appRouter = router({
   auth: authRouter,
@@ -53,6 +54,7 @@ export const appRouter = router({
   billing: billingRouter,
   ecosystem: ecosystemRouter,
   socialInsights: socialInsightsRouter,
+  email: emailRouter,
 });
 
 export type AppRouter = typeof appRouter;

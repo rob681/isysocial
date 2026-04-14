@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
-import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, RotateCcw, ArrowRight } from "lucide-react";
+import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, RotateCcw, ArrowRight, Mail, Bell, FlaskConical, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -70,6 +70,256 @@ function TourResetCard() {
             </>
           )}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── EmailSettingsSection ───────────────────────────────────────── */
+function EmailSettingsSection() {
+  const { toast } = useToast();
+  const utils = trpc.useUtils();
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
+
+  const { data: settings, isLoading } = trpc.email.getSettings.useQuery();
+
+  const [form, setForm] = useState({
+    notificationEmailEnabled: true,
+    resendApiKey: "",
+    fromAddress: "noreply@isysocial.com",
+    fromName: "Isysocial",
+    notifyOnInReview: true,
+    notifyOnApproved: true,
+    notifyOnChangesRequested: true,
+    notifyOnPublished: true,
+    notifyOnComment: true,
+  });
+
+  const [initialized, setInitialized] = useState(false);
+
+  if (settings && !initialized) {
+    setForm({
+      notificationEmailEnabled: Boolean(settings.notificationEmailEnabled),
+      resendApiKey: String(settings.resendApiKey ?? ""),
+      fromAddress: String(settings.fromAddress ?? "noreply@isysocial.com"),
+      fromName: String(settings.fromName ?? "Isysocial"),
+      notifyOnInReview: Boolean(settings.notifyOnInReview),
+      notifyOnApproved: Boolean(settings.notifyOnApproved),
+      notifyOnChangesRequested: Boolean(settings.notifyOnChangesRequested),
+      notifyOnPublished: Boolean(settings.notifyOnPublished),
+      notifyOnComment: Boolean(settings.notifyOnComment),
+    });
+    setInitialized(true);
+  }
+
+  const updateSettings = trpc.email.updateSettings.useMutation({
+    onSuccess: () => {
+      toast({ title: "Configuración de email guardada" });
+      utils.email.getSettings.invalidate();
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const sendTest = trpc.email.sendTest.useMutation({
+    onSuccess: () => {
+      toast({ title: "Email de prueba enviado", description: `Revisa la bandeja de ${testEmail}` });
+      setSendingTest(false);
+    },
+    onError: (err) => {
+      toast({ title: "Error al enviar prueba", description: err.message, variant: "destructive" });
+      setSendingTest(false);
+    },
+  });
+
+  const handleSave = () => {
+    updateSettings.mutate({
+      ...form,
+      resendApiKey: form.resendApiKey.trim() || undefined,
+    });
+  };
+
+  const handleSendTest = () => {
+    if (!testEmail) return;
+    setSendingTest(true);
+    sendTest.mutate({ toEmail: testEmail });
+  };
+
+  const NOTIFY_OPTIONS = [
+    { key: "notifyOnInReview" as const, label: "Contenido listo para revisión", desc: "Notificar al cliente cuando un post pasa a IN_REVIEW" },
+    { key: "notifyOnApproved" as const, label: "Contenido aprobado", desc: "Notificar al editor cuando el cliente aprueba" },
+    { key: "notifyOnChangesRequested" as const, label: "Cambios solicitados", desc: "Notificar al editor cuando el cliente pide cambios" },
+    { key: "notifyOnPublished" as const, label: "Publicación exitosa", desc: "Notificar al cliente cuando su post se publica" },
+    { key: "notifyOnComment" as const, label: "Nuevos comentarios", desc: "Notificar cuando se agrega un comentario en un post" },
+  ] as const;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Mail className="h-4 w-4" />
+          Notificaciones por email
+        </CardTitle>
+        <CardDescription>
+          Configura Resend para enviar emails automáticos a clientes y editores
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : (
+          <>
+            {/* Master toggle */}
+            <div className="flex items-center justify-between py-2 border-b">
+              <div>
+                <p className="text-sm font-medium">Notificaciones habilitadas</p>
+                <p className="text-xs text-muted-foreground">Activa o desactiva todos los emails</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, notificationEmailEnabled: !f.notificationEmailEnabled }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  form.notificationEmailEnabled ? "bg-primary" : "bg-input"
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  form.notificationEmailEnabled ? "translate-x-6" : "translate-x-1"
+                }`} />
+              </button>
+            </div>
+
+            {/* API credentials */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Credenciales Resend</h4>
+
+              <div className="space-y-2">
+                <Label>API Key de Resend</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type={showApiKey ? "text" : "password"}
+                    placeholder={settings?.resendApiKey ? "••••••••••••••••" : "re_xxxxxxxxxxxxxxxx"}
+                    value={form.resendApiKey}
+                    onChange={(e) => setForm(f => ({ ...f, resendApiKey: e.target.value }))}
+                    className="flex-1 font-mono text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Obtén tu API key en{" "}
+                  <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                    resend.com/api-keys
+                  </a>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Remitente (email)</Label>
+                  <Input
+                    type="email"
+                    placeholder="noreply@tudominio.com"
+                    value={form.fromAddress}
+                    onChange={(e) => setForm(f => ({ ...f, fromAddress: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nombre del remitente</Label>
+                  <Input
+                    placeholder="Mi Agencia"
+                    value={form.fromName}
+                    onChange={(e) => setForm(f => ({ ...f, fromName: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notification toggles */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide flex items-center gap-1.5">
+                <Bell className="h-3.5 w-3.5" />
+                Tipos de notificación
+              </h4>
+              {NOTIFY_OPTIONS.map(({ key, label, desc }) => (
+                <div key={key} className="flex items-start justify-between gap-4 py-2 border-b border-border/50 last:border-0">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, [key]: !f[key] }))}
+                    className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+                      form[key] ? "bg-primary" : "bg-input"
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      form[key] ? "translate-x-4" : "translate-x-0.5"
+                    }`} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Test email */}
+            <div className="rounded-lg bg-muted/50 p-4 space-y-3">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <FlaskConical className="h-4 w-4 text-primary" />
+                Enviar email de prueba
+              </h4>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendTest}
+                  disabled={!testEmail || sendingTest}
+                >
+                  {sendingTest ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4 mr-1.5" />
+                      Enviar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Save button */}
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={updateSettings.isPending}
+                className="gradient-primary text-white"
+              >
+                {updateSettings.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Guardar configuración de email
+              </Button>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -710,6 +960,9 @@ function ConfiguracionContent() {
 
             {/* Social connections — managed per client */}
             <SocialNetworksRedirectCard />
+
+            {/* Email / Resend Settings */}
+            <EmailSettingsSection />
 
             {/* Categories */}
             <CategoriesSection />
