@@ -34,7 +34,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PostType } from "@isysocial/shared";
 
 const TONE_OPTIONS = [
@@ -298,9 +297,8 @@ export function AiAssistant({
                     key: "vision" as const,
                     Icon: ScanEye,
                     label: "Desde media",
-                    desc: "La IA analiza tu imagen/video y genera copy",
+                    desc: "La IA analiza tu imagen y genera copy",
                     disabled: !mediaUrls?.length || ["VIDEO", "REEL", "STORY"].includes(postType || ""),
-                    tooltip: ["VIDEO", "REEL", "STORY"].includes(postType || "") ? "No disponible para videos" : undefined,
                   },
                   {
                     key: "existing" as const,
@@ -309,53 +307,35 @@ export function AiAssistant({
                     desc: "Refina el copy que ya escribiste en el editor",
                     disabled: !currentCopy?.trim(),
                   },
-                ].map(({ key, Icon, label, desc, disabled, tooltip }) => {
-                  const buttonContent = (
-                    <button
-                      key={key}
-                      onClick={() => !disabled && setSourceType(key)}
-                      disabled={disabled}
+                ].map(({ key, Icon, label, desc, disabled }) => (
+                  <button
+                    key={key}
+                    onClick={() => !disabled && setSourceType(key)}
+                    disabled={disabled}
+                    className={cn(
+                      "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                      sourceType === key
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "hover:bg-accent",
+                      disabled && "opacity-40 cursor-not-allowed"
+                    )}
+                  >
+                    <div
                       className={cn(
-                        "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                        "mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
                         sourceType === key
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "hover:bg-accent",
-                        disabled && "opacity-40 cursor-not-allowed"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
                       )}
                     >
-                      <div
-                        className={cn(
-                          "mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                          sourceType === key
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{label}</p>
-                        <p className="text-[11px] text-muted-foreground">{desc}</p>
-                      </div>
-                    </button>
-                  );
-
-                  if (tooltip) {
-                    return (
-                      <TooltipProvider key={key}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            {buttonContent}
-                          </TooltipTrigger>
-                          <TooltipContent side="left" className="text-xs">
-                            {tooltip}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    );
-                  }
-                  return buttonContent;
-                })}
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-[11px] text-muted-foreground">{desc}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
 
