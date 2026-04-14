@@ -205,9 +205,9 @@ export function CalendarScheduler({
               {calendarDays.map((day, idx) => {
                 const isBlank = day === null;
                 const date = isBlank ? null : new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                const isPast = date && date < today && !isSameDay(date, today);
-                const isSelected = date && isSameDay(date, selectedDate);
-                const isToday = date && isSameDay(date, today);
+                const isPast = Boolean(date && date < today && !isSameDay(date, today));
+                const isSelected = Boolean(date && isSameDay(date, selectedDate));
+                const isToday = Boolean(date && isSameDay(date, today));
 
                 return (
                   <button
