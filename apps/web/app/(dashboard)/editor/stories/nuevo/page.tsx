@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 
 function NewStoryContent() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get("clientId") || "";
+  const clientId = searchParams.get("clientId") ?? null;
   const network = searchParams.get("network") || "INSTAGRAM";
   const { toast } = useToast();
   const router = useRouter();
@@ -19,14 +19,14 @@ function NewStoryContent() {
   const creatingRef = useRef(false);
 
   const createPost = trpc.posts.create.useMutation();
-  const clientQuery = trpc.clients.get.useQuery({ id: clientId }, { enabled: !!clientId });
+  const clientQuery = trpc.clients.get.useQuery({ id: clientId ?? "" }, { enabled: !!clientId });
 
   useEffect(() => {
     if (!clientId || postId || creatingRef.current) return;
     creatingRef.current = true;
     createPost
       .mutateAsync({
-        clientId,
+        clientId: clientId!,
         network: network as any,
         postType: "STORY",
         title: "Nueva historia",
@@ -40,6 +40,26 @@ function NewStoryContent() {
       });
   }, [clientId]);
 
+  // Guard: no clientId provided — show user-friendly error instead of a blank spinner
+  if (!clientId) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+        <div className="text-center space-y-4 max-w-sm">
+          <p className="text-lg font-semibold">Selecciona un cliente</p>
+          <p className="text-sm text-muted-foreground">
+            Para crear una historia, primero selecciona un cliente desde el panel lateral.
+          </p>
+          <button
+            onClick={() => router.push("/editor/contenido")}
+            className="text-sm text-primary underline"
+          >
+            Volver a contenido
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!postId) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
@@ -52,7 +72,7 @@ function NewStoryContent() {
     <StoryEditorErrorBoundary basePath="/editor/contenido">
       <StoryEditor
         postId={postId}
-        clientId={clientId}
+        clientId={clientId!}
         network={network}
         clientName={clientQuery.data?.companyName}
         basePath="/editor/contenido"

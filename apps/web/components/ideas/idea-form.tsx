@@ -22,6 +22,7 @@ import {
   NETWORK_POST_TYPES,
   NETWORK_COLORS,
 } from "@isysocial/shared";
+import { IdeaSketchMockup } from "@/components/mockups/idea-sketch";
 import type { SocialNetwork, PostType } from "@isysocial/shared";
 import { useToast } from "@/hooks/use-toast";
 
@@ -405,6 +406,16 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Sketch mockup — always visible in right panel */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground px-1">Vista previa de idea</p>
+                <IdeaSketchMockup
+                  title={title || undefined}
+                  description={description || undefined}
+                  networks={selectedNetworks}
+                />
+              </div>
 
               {/* Preview card */}
               {title.trim() && (

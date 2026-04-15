@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 
 function AdminNewStoryContent() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get("clientId") || "";
+  const clientId = searchParams.get("clientId") ?? null;
   const network = searchParams.get("network") || "INSTAGRAM";
   const mode = searchParams.get("mode"); // "batch" for batch creation
   const batchCount = parseInt(searchParams.get("count") || "3", 10);
@@ -22,7 +22,7 @@ function AdminNewStoryContent() {
 
   const createPost = trpc.posts.create.useMutation();
   const createBatch = trpc.stories.createBatch.useMutation();
-  const clientQuery = trpc.clients.get.useQuery({ id: clientId }, { enabled: !!clientId });
+  const clientQuery = trpc.clients.get.useQuery({ id: clientId ?? "" }, { enabled: !!clientId });
 
   useEffect(() => {
     if (!clientId || postId || creatingRef.current) return;
@@ -30,7 +30,7 @@ function AdminNewStoryContent() {
 
     if (mode === "batch") {
       createBatch
-        .mutateAsync({ clientId, network: network as any, count: Math.min(Math.max(batchCount, 2), 10) })
+        .mutateAsync({ clientId: clientId!, network: network as any, count: Math.min(Math.max(batchCount, 2), 10) })
         .then((result) => {
           creatingRef.current = false; // ✅ Reset on success
           router.replace(`/admin/stories/batch/${result.batchId}`);
@@ -45,7 +45,7 @@ function AdminNewStoryContent() {
 
     createPost
       .mutateAsync({
-        clientId,
+        clientId: clientId!,
         network: network as any,
         postType: "STORY",
         title: "Nueva historia",

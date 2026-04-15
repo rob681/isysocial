@@ -64,9 +64,11 @@ interface PostEditorProps {
   defaultValues?: Partial<FormValues>;
   defaultMedia?: MockupMedia[];
   existingMedia?: ExistingMediaItem[];
+  /** Base path to redirect to after successful creation, e.g. "/admin/contenido" or "/editor/contenido" */
+  successRedirectBase?: string;
 }
 
-export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia: initialExistingMedia }: PostEditorProps) {
+export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia: initialExistingMedia, successRedirectBase = "/admin/contenido" }: PostEditorProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [uploadedMedia, setUploadedMedia] = useState<
@@ -106,8 +108,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
           ? "Enviada para aprobación del cliente."
           : "El borrador se guardó correctamente.",
       });
-      const clientId = watchedValues.clientId;
-      router.push(`/cliente/${clientId}/contenido/${data.id}`);
+      router.push(`${successRedirectBase}/${data.id}`);
     },
     onError: (err) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -277,7 +278,7 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full">
+    <div className={`grid grid-cols-1 gap-6 h-full items-start ${showAiAssistant ? "xl:grid-cols-[1fr_380px_300px]" : "xl:grid-cols-[1fr_420px]"}`}>
       {/* ─── Left: Form ─────────────────────────────────────────────── */}
       <div className="flex-1 min-w-0 space-y-6">
         <div className="flex items-center gap-3">
@@ -521,8 +522,8 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
             </div>
             <Textarea
               placeholder="Escribe el texto de la publicación..."
-              rows={5}
-              className="resize-none"
+              rows={7}
+              className="resize-none min-h-[140px]"
               {...form.register("copy")}
             />
           </div>
@@ -877,9 +878,9 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
       </div>
 
       {/* ─── Right: Live Preview ───────────────────────────────────── */}
-      <div className={`${showAiAssistant ? "lg:w-[320px]" : "lg:w-[380px] xl:w-[420px]"} flex-shrink-0 transition-all`}>
-        <div className="sticky top-6">
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Vista previa</h3>
+      <div className="w-full transition-all">
+        <div className="sticky top-4 space-y-4">
+          <h3 className="text-sm font-semibold text-muted-foreground">Vista previa</h3>
           <div className="flex justify-center p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border">
             <MockupRenderer
               network={watchedValues.network as SocialNetwork}
