@@ -11,8 +11,6 @@ import {
   Loader2,
   ArrowLeft,
   Save,
-  Lightbulb,
-  Calendar as CalendarIcon,
   ImagePlus,
   X,
 } from "lucide-react";
@@ -147,21 +145,28 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
           formData.append("file", imageFile);
           formData.append("folder", "ideas");
           const res = await fetch("/api/upload", { method: "POST", body: formData });
-          if (res.ok) {
-            const upload = await res.json();
-            await addMedia.mutateAsync({
-              ideaId: idea.id,
-              files: [{
-                fileName: upload.fileName,
-                fileUrl: upload.url,
-                storagePath: upload.storagePath,
-                mimeType: upload.mimeType,
-              }],
-            });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || "Error al subir el archivo");
           }
-        } catch (err) {
-          // Non-blocking: idea was already created
+          const upload = await res.json();
+          await addMedia.mutateAsync({
+            ideaId: idea.id,
+            files: [{
+              fileName: imageFile.name,
+              fileUrl: upload.url,
+              storagePath: upload.storagePath,
+              mimeType: imageFile.type,
+            }],
+          });
+        } catch (err: any) {
+          // Non-blocking: idea was already created, but warn the user
           console.error("Error uploading image:", err);
+          toast({
+            title: "Idea creada, pero la imagen no se pudo guardar",
+            description: err.message,
+            variant: "destructive",
+          });
         }
       }
 
@@ -235,53 +240,77 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                   />
                 </div>
 
-                {/* Image Upload Zone */}
+                {/* Image Upload Zone — compact thumbnail */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
                     Imagen o video de referencia
                   </label>
-                  <div
-                    className="border-2 border-dashed rounded-xl text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors overflow-hidden"
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                  >
-                    {imagePreview ? (
-                      <div className="relative group">
+
+                  {imagePreview ? (
+                    /* Compact thumbnail strip */
+                    <div className="flex items-center gap-3 p-2.5 border rounded-xl bg-zinc-50 dark:bg-zinc-800/50">
+                      {/* Thumbnail */}
+                      <div
+                        className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-200 dark:bg-zinc-700 cursor-pointer"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
                         {imageFile && isVideo(imageFile) ? (
                           <video
                             src={imagePreview}
-                            className="w-full max-h-64 object-contain bg-zinc-50 dark:bg-zinc-900"
-                            controls
+                            className="w-full h-full object-cover"
                             muted
+                            playsInline
                           />
                         ) : (
                           <img
                             src={imagePreview}
                             alt="Preview"
-                            className="w-full max-h-64 object-contain bg-zinc-50 dark:bg-zinc-900"
+                            className="w-full h-full object-cover"
                           />
                         )}
+                      </div>
+                      {/* File info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{imageFile?.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {imageFile && isVideo(imageFile) ? "Video" : "Imagen"} ·{" "}
+                          {imageFile ? (imageFile.size / 1024 / 1024).toFixed(1) : "?"}MB
+                        </p>
                         <button
                           type="button"
-                          onClick={removeImage}
-                          className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-xs text-primary hover:underline mt-0.5"
                         >
-                          <X className="h-4 w-4" />
+                          Cambiar archivo
                         </button>
                       </div>
-                    ) : (
-                      <div className="py-8 px-4">
-                        <ImagePlus className="h-10 w-10 mx-auto text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground mt-3">
-                          Arrastra una imagen o video, o haz clic para seleccionar
-                        </p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">
-                          PNG, JPG, WebP, MP4, MOV (máx. 50MB)
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                      {/* Remove */}
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    /* Drop zone — compact */
+                    <div
+                      className="border-2 border-dashed rounded-xl text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors py-5 px-4"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                    >
+                      <ImagePlus className="h-7 w-7 mx-auto text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Arrastra o haz clic para seleccionar
+                      </p>
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">
+                        PNG, JPG, WebP, MP4, MOV (máx. 50MB)
+                      </p>
+                    </div>
+                  )}
+
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -407,88 +436,17 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                 </CardContent>
               </Card>
 
-              {/* Sketch mockup — always visible in right panel */}
+              {/* Sketch mockup — always visible, shows real-time data + image */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground px-1">Vista previa de idea</p>
                 <IdeaSketchMockup
                   title={title || undefined}
                   description={description || undefined}
                   networks={selectedNetworks}
+                  images={imagePreview ? [imagePreview] : []}
+                  isVideo={imageFile ? isVideo(imageFile) : false}
                 />
               </div>
-
-              {/* Preview card */}
-              {title.trim() && (
-                <Card className="bg-muted/50 overflow-hidden">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">Vista previa</CardTitle>
-                  </CardHeader>
-
-                  {/* Image preview in card */}
-                  {imagePreview && (
-                    <div className="px-4">
-                      <div className="rounded-lg overflow-hidden">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full h-32 object-cover"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <CardContent className="space-y-3 pt-2">
-                    <div className="flex items-start gap-2">
-                      <Lightbulb className="h-4 w-4 mt-0.5 text-amber-500 flex-shrink-0" />
-                      <p className="text-sm font-medium leading-tight">{title}</p>
-                    </div>
-
-                    {description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedClient && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                          {selectedClient.companyName}
-                        </span>
-                      )}
-                      {selectedNetworks.map((net) => (
-                        <span
-                          key={net}
-                          className="text-[11px] px-2 py-0.5 rounded-full text-white font-medium"
-                          style={{
-                            backgroundColor:
-                              NETWORK_COLORS[net as SocialNetwork] || "#6b7280",
-                          }}
-                        >
-                          {NETWORK_LABELS[net as SocialNetwork]}
-                        </span>
-                      ))}
-                      {postType && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
-                          {POST_TYPE_LABELS[postType as PostType]}
-                        </span>
-                      )}
-                    </div>
-
-                    {tentativeDate && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <CalendarIcon className="h-3 w-3" />
-                        <span>
-                          {new Date(tentativeDate + "T12:00:00").toLocaleDateString("es-MX", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
             </div>
           </div>
         </div>

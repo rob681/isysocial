@@ -39,6 +39,7 @@ import {
   POST_TYPE_LABELS,
   NETWORK_POST_TYPES,
 } from "@isysocial/shared";
+import { IdeaSketchMockup } from "@/components/mockups/idea-sketch";
 import type { SocialNetwork, PostType, IdeaStatus } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -335,8 +336,19 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
           )}
         </div>
 
-        {/* Right: Media + Links */}
+        {/* Right: Sketch mockup + Media + Links */}
         <div className="lg:w-[380px] flex-shrink-0 space-y-6">
+          {/* Sketch mockup — idea visual summary */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground px-1">Vista de idea</p>
+            <IdeaSketchMockup
+              title={idea.title}
+              description={idea.description || undefined}
+              networks={idea.networks?.length ? idea.networks : idea.network ? [idea.network] : []}
+              images={idea.media.map((m) => m.fileUrl).filter(Boolean) as string[]}
+            />
+          </div>
+
           {/* Media / Images */}
           <Card>
             <CardHeader><CardTitle className="text-base flex items-center gap-2"><Image className="h-4 w-4" />Imágenes ({idea.media.length})</CardTitle></CardHeader>
