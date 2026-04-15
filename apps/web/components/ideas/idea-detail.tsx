@@ -37,6 +37,7 @@ import {
   NETWORK_POST_TYPES,
 } from "@isysocial/shared";
 import { IdeaSketchMockup } from "@/components/mockups/idea-sketch";
+import { uploadFileToStorage } from "@/lib/upload";
 import type { SocialNetwork, PostType, IdeaStatus } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -90,18 +91,24 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
     try {
       const uploadedFiles = [];
       for (const file of Array.from(files)) {
-        if (file.size > 50 * 1024 * 1024) { toast({ title: "Error", description: `${file.name} es demasiado grande (máx 50MB)`, variant: "destructive" }); continue; }
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("folder", "ideas");
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error("Error al subir archivo");
-        const data = await res.json();
-        uploadedFiles.push({ fileName: file.name, fileUrl: data.url, storagePath: data.storagePath, mimeType: file.type });
+        if (file.size > 50 * 1024 * 1024) {
+          toast({ title: "Error", description: `${file.name} es demasiado grande (máx 50MB)`, variant: "destructive" });
+          continue;
+        }
+        // Direct upload to Supabase (bypasses Vercel's 4.5 MB body limit)
+        const result = await uploadFileToStorage(file, "ideas");
+        uploadedFiles.push({
+          fileName: result.fileName,
+          fileUrl: result.url,
+          storagePath: result.storagePath,
+          mimeType: result.mimeType,
+        });
       }
-      if (uploadedFiles.length > 0) await addMedia.mutateAsync({ ideaId: idea.id, files: uploadedFiles });
+      if (uploadedFiles.length > 0) {
+        await addMedia.mutateAsync({ ideaId: idea.id, files: uploadedFiles });
+      }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "No se pudieron subir las imágenes", variant: "destructive" });
+      toast({ title: "Error al subir", description: err.message || "No se pudieron subir los archivos", variant: "destructive" });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

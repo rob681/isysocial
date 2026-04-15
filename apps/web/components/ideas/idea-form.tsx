@@ -21,6 +21,7 @@ import {
   NETWORK_COLORS,
 } from "@isysocial/shared";
 import { IdeaSketchMockup } from "@/components/mockups/idea-sketch";
+import { uploadFileToStorage } from "@/lib/upload";
 import type { SocialNetwork, PostType } from "@isysocial/shared";
 import { useToast } from "@/hooks/use-toast";
 
@@ -138,25 +139,17 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
         tentativeDate: tentativeDate ? new Date(tentativeDate) : undefined,
       });
 
-      // Step 2: Upload image if selected
+      // Step 2: Upload image if selected (direct to Supabase — bypasses Vercel limit)
       if (imageFile) {
         try {
-          const formData = new FormData();
-          formData.append("file", imageFile);
-          formData.append("folder", "ideas");
-          const res = await fetch("/api/upload", { method: "POST", body: formData });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || "Error al subir el archivo");
-          }
-          const upload = await res.json();
+          const upload = await uploadFileToStorage(imageFile, "ideas");
           await addMedia.mutateAsync({
             ideaId: idea.id,
             files: [{
-              fileName: imageFile.name,
+              fileName: upload.fileName,
               fileUrl: upload.url,
               storagePath: upload.storagePath,
-              mimeType: imageFile.type,
+              mimeType: upload.mimeType,
             }],
           });
         } catch (err: any) {

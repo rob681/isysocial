@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Save, Lightbulb, Upload, X, Image, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Topbar } from "@/components/layout/topbar";
+import { uploadFileToStorage } from "@/lib/upload";
 
 export default function ClienteNuevaIdeaPage() {
   const router = useRouter();
@@ -29,17 +30,13 @@ export default function ClienteNuevaIdeaPage() {
         try {
           const uploadedFiles = [];
           for (const pf of pendingFiles) {
-            const formData = new FormData();
-            formData.append("file", pf.file);
-            formData.append("folder", "ideas");
-            const res = await fetch("/api/upload", { method: "POST", body: formData });
-            if (!res.ok) continue;
-            const data = await res.json();
+            // Direct upload to Supabase (bypasses Vercel's 4.5 MB body limit)
+            const result = await uploadFileToStorage(pf.file, "ideas");
             uploadedFiles.push({
-              fileName: pf.file.name,
-              fileUrl: data.url,
-              storagePath: data.storagePath,
-              mimeType: pf.file.type,
+              fileName: result.fileName,
+              fileUrl: result.url,
+              storagePath: result.storagePath,
+              mimeType: result.mimeType,
             });
           }
           if (uploadedFiles.length > 0) {
