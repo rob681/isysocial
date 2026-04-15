@@ -1,5 +1,5 @@
 {
-  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
+  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
   "crons": [
     {
       "path": "/api/cron/refresh-tokens",
