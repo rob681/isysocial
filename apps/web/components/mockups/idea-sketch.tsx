@@ -104,21 +104,21 @@ export function IdeaSketchMockup({
           {/* Header: bulb + title */}
           <div className="flex items-center gap-2">
             <div
-              className="w-8 h-8 flex items-center justify-center text-lg flex-shrink-0"
+              className="w-9 h-9 flex items-center justify-center text-xl flex-shrink-0"
               style={{ filter: "url(#idea-pencil)" }}
             >
               💡
             </div>
             <div className="flex-1 min-w-0">
               <p
-                className="text-[11px] text-amber-600/70 uppercase tracking-widest"
-                style={{ fontFamily: "'Caveat', cursive", letterSpacing: "0.15em" }}
+                className="text-xs text-amber-600/70 uppercase"
+                style={{ fontFamily: "'Caveat', cursive", letterSpacing: "0.18em" }}
               >
                 idea
               </p>
               {title ? (
                 <p
-                  className="text-base font-bold text-zinc-800 leading-tight truncate"
+                  className="text-xl font-bold text-zinc-800 leading-tight"
                   style={{ fontFamily: "'Caveat', cursive" }}
                 >
                   {title}
@@ -133,17 +133,17 @@ export function IdeaSketchMockup({
           <div
             className="w-full border border-amber-800/15 flex items-center justify-center relative overflow-hidden"
             style={{
-              height: "130px",
+              minHeight: hasImages ? undefined : "120px",
               borderRadius: "8px 20px 10px 18px/18px 10px 20px 8px",
             }}
           >
             {hasImages && currentImg ? (
               <>
-                {/* Actual image or video */}
+                {/* Actual image or video — object-contain so nothing gets cropped */}
                 {isVideo && imgIdx === 0 ? (
                   <video
                     src={currentImg}
-                    className="w-full h-full object-cover"
+                    className="w-full max-h-56 object-contain bg-amber-100/60"
                     muted
                     playsInline
                   />
@@ -151,7 +151,7 @@ export function IdeaSketchMockup({
                   <img
                     src={currentImg}
                     alt=""
-                    className="w-full h-full object-cover"
+                    className="w-full max-h-56 object-contain bg-amber-100/60"
                   />
                 )}
 
@@ -230,7 +230,7 @@ export function IdeaSketchMockup({
           <div className="space-y-2 px-1">
             {description ? (
               <p
-                className="text-sm text-zinc-600 leading-snug line-clamp-3"
+                className="text-base text-zinc-600 leading-snug line-clamp-3"
                 style={{ fontFamily: "'Caveat', cursive" }}
               >
                 {description}
@@ -247,8 +247,8 @@ export function IdeaSketchMockup({
           {/* Doodle arrow + "borrador" */}
           <div className="flex items-center gap-1.5 px-1">
             <svg
-              width="18"
-              height="12"
+              width="20"
+              height="13"
               viewBox="0 0 18 12"
               className="text-amber-500 opacity-60 flex-shrink-0"
               style={{ filter: "url(#idea-pencil)" }}
@@ -270,7 +270,7 @@ export function IdeaSketchMockup({
               />
             </svg>
             <span
-              className="text-[13px] text-amber-600/60"
+              className="text-sm text-amber-600/60"
               style={{ fontFamily: "'Caveat', cursive", fontStyle: "italic" }}
             >
               borrador
@@ -283,7 +283,7 @@ export function IdeaSketchMockup({
               {networks.map((net) => (
                 <span
                   key={net}
-                  className="inline-flex items-center px-2 py-0.5 text-xs font-bold text-white rounded-full"
+                  className="inline-flex items-center px-2.5 py-0.5 text-sm font-bold text-white"
                   style={{
                     backgroundColor: NETWORK_COLORS[net] || "#6b7280",
                     filter: "url(#idea-pencil)",
@@ -300,7 +300,7 @@ export function IdeaSketchMockup({
               {["IG", "FB", "TK"].map((abbr) => (
                 <span
                   key={abbr}
-                  className="inline-flex items-center px-2 py-0.5 text-xs font-bold text-zinc-400 rounded-full border border-zinc-300/60"
+                  className="inline-flex items-center px-2.5 py-0.5 text-sm font-bold text-zinc-400 rounded-full border border-zinc-300/60"
                   style={{
                     borderRadius: "12px 4px 10px 4px/4px 10px 4px 12px",
                     filter: "url(#idea-pencil)",

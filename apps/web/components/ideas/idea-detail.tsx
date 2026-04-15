@@ -16,7 +16,6 @@ import {
   MessageCircle,
   Send,
   Link2,
-  Image,
   Loader2,
   Lightbulb,
   Trash2,
@@ -28,8 +27,6 @@ import {
   Plus,
   Upload,
   User2,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import {
   IDEA_STATUS_LABELS,
@@ -52,49 +49,6 @@ interface IdeaDetailProps {
   canUploadMedia?: boolean;
 }
 
-/* ─── Lightbox ───────────────────────────────────────────────────────────── */
-function ImageLightbox({
-  images,
-  initialIndex,
-  onClose,
-}: {
-  images: { fileUrl: string; fileName: string }[];
-  initialIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(initialIndex);
-  const current = images[index];
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
-      <button className="absolute top-4 right-4 text-white/80 hover:text-white z-50" onClick={onClose}>
-        <X className="h-8 w-8" />
-      </button>
-      {images.length > 1 && (
-        <>
-          <button
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-black/30 rounded-full p-2"
-            onClick={(e) => { e.stopPropagation(); setIndex((i) => (i > 0 ? i - 1 : images.length - 1)); }}
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-black/30 rounded-full p-2"
-            onClick={(e) => { e.stopPropagation(); setIndex((i) => (i < images.length - 1 ? i + 1 : 0)); }}
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-        </>
-      )}
-      <div className="max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-        <img src={current.fileUrl} alt={current.fileName} className="max-w-full max-h-[85vh] object-contain rounded-lg" />
-      </div>
-      {images.length > 1 && (
-        <div className="absolute bottom-4 text-white/70 text-sm">{index + 1} / {images.length}</div>
-      )}
-    </div>
-  );
-}
 
 export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canDelete = false, canUploadMedia = false }: IdeaDetailProps) {
   const params = useParams();
@@ -116,7 +70,6 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
   const [editPostType, setEditPostType] = useState<string>("");
   const [editTentativeDate, setEditTentativeDate] = useState<string>("");
   const [uploading, setUploading] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const { data: idea, isLoading, refetch } = trpc.ideas.get.useQuery({ id: ideaId });
 
@@ -189,10 +142,6 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {lightboxIndex !== null && idea.media.length > 0 && (
-        <ImageLightbox images={idea.media} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
-      )}
-
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.push(backPath)}>
@@ -349,53 +298,24 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
             />
           </div>
 
-          {/* Media / Images */}
-          <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Image className="h-4 w-4" />Imágenes ({idea.media.length})</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {idea.media.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  <Image className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Sin imágenes</p>
-                  <p className="text-xs mt-1">Adjunta imágenes de referencia para esta idea</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 cursor-pointer group" onClick={() => setLightboxIndex(0)}>
-                    <img src={idea.media[0].fileUrl} alt={idea.media[0].fileName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                    {(canEdit || canUploadMedia) && !isLocked && (
-                      <button className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); removeMedia.mutate({ mediaId: idea.media[0].id }); }}>
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                  {idea.media.length > 1 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {idea.media.slice(1).map((m, idx) => (
-                        <div key={m.id} className="relative aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 cursor-pointer group" onClick={() => setLightboxIndex(idx + 1)}>
-                          <img src={m.fileUrl} alt={m.fileName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-                          {(canEdit || canUploadMedia) && !isLocked && (
-                            <button className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); removeMedia.mutate({ mediaId: m.id }); }}>
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+          {/* Media upload — compact, no gallery (images shown in mockup above) */}
+          {(canEdit || canUploadMedia) && !isLocked && (
+            <div>
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileUpload} />
+              <Button variant="outline" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                {uploading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Subiendo...</>
+                ) : (
+                  <><Upload className="h-4 w-4 mr-2" />
+                  Agregar imágenes
+                  {idea.media.length > 0 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">({idea.media.length})</span>
                   )}
-                </div>
-              )}
-              {(canEdit || canUploadMedia) && !isLocked && (
-                <div className="pt-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileUpload} />
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                    {uploading ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />Subiendo...</>) : (<><Upload className="h-4 w-4 mr-2" />Agregar imágenes</>)}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
 
           {/* Reference Links */}
           <Card>

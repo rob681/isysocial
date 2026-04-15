@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { uploadFile } from "@isysocial/api/src/lib/supabase-storage";
+import { uploadFile, getSignedUrl, ensureBucketExists } from "@isysocial/api/src/lib/supabase-storage";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const ALLOWED_TYPES = [
@@ -51,17 +51,25 @@ export async function POST(req: NextRequest) {
     const path = `${folder}/${filename}`;
     const bucket = "isysocial-media";
 
-    const { storagePath, url } = await uploadFile(bucket, path, buffer, file.type);
+    // Auto-create bucket if it doesn't exist yet
+    await ensureBucketExists(bucket);
+
+    const { storagePath } = await uploadFile(bucket, path, buffer, file.type);
+
+    // Generate a 1-hour signed URL for immediate display
+    const signedUrl = await getSignedUrl(storagePath, 3600);
 
     return NextResponse.json({
-      url,
+      url: signedUrl,
       storagePath,
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.type,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Upload] Error:", error);
-    return NextResponse.json({ error: "Error al subir archivo" }, { status: 500 });
+    // Return the actual error message so the client can show it
+    const message = error?.message || "Error al subir archivo";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
