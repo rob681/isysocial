@@ -125,6 +125,7 @@ const superAdminNav: NavItem[] = [
   { label: "Plataforma", href: "/superadmin", icon: <Globe className="h-5 w-5" /> },
   { label: "Agencias", href: "/superadmin/agencias", icon: <Building2 className="h-5 w-5" /> },
   { label: "Staff", href: "/superadmin/staff", icon: <Shield className="h-5 w-5" /> },
+  { label: "Configuración", href: "/superadmin/configuracion", icon: <Settings className="h-5 w-5" /> },
 ];
 
 const soporteNav: NavItem[] = [

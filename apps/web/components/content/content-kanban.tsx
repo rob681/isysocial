@@ -14,9 +14,10 @@ import {
 } from "@dnd-kit/core";
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
-import { FileImage } from "lucide-react";
+import { FileImage, Play } from "lucide-react";
 import { NETWORK_LABELS, NETWORK_COLORS } from "@isysocial/shared";
 import type { SocialNetwork } from "@isysocial/shared";
+import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 
 /* ─── Types ──────────────────────────────────────────────────────── */
 
@@ -73,14 +74,30 @@ function KanbanCard({
   const networkColor = NETWORK_COLORS[post.network as SocialNetwork] || "#888";
   const networkLabel = NETWORK_LABELS[post.network as SocialNetwork] || post.network;
   const thumbnail = post.media?.[0]?.fileUrl;
+  const mimeType = post.media?.[0]?.mimeType;
+  // Detect video by mimeType OR by file extension as fallback (defense in depth)
+  const isVideoByMime = mimeType?.startsWith("video/");
+  const isVideoByExt = thumbnail
+    ? /\.(mp4|webm|mov|avi|mkv)(\?|$|#)/i.test(thumbnail)
+    : false;
+  const isVideo = isVideoByMime || isVideoByExt;
   const displayTitle = post.title || post.copy?.slice(0, 40) || "Sin contenido";
 
   const cardContent = (
     <div className="flex items-start gap-2.5">
       {/* Thumbnail */}
-      <div className="w-10 h-10 rounded-md bg-zinc-100 dark:bg-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+      <div className="w-10 h-10 rounded-md bg-zinc-100 dark:bg-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center relative">
         {thumbnail ? (
-          <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+          isVideo ? (
+            <>
+              <VideoThumbnail src={thumbnail} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                <Play className="h-3 w-3 text-white drop-shadow" />
+              </div>
+            </>
+          ) : (
+            <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+          )
         ) : (
           <FileImage className="h-4 w-4 text-muted-foreground/40" />
         )}

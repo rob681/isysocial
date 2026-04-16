@@ -349,7 +349,7 @@ REGLAS ESTRICTAS:
 
       const anthropic = new Anthropic();
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 1500,
         system: systemPrompt,
         messages: [
@@ -558,7 +558,7 @@ REGLAS:
 
       const anthropic = new Anthropic();
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 500,
         system: `Eres experto en brand voice consistency. Compara el tono de un copy contra toda la información de marca del cliente.
 

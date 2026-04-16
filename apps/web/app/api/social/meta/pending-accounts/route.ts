@@ -2,6 +2,8 @@
 // This route handler reads the pending Meta accounts stored in SystemConfig
 // by the OAuth callback, so the frontend selector page can display them.
 
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";

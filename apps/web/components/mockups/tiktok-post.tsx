@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Heart, MessageCircle, Bookmark, Share2, Music, Plus } from "lucide-react";
 import type { MockupProps } from "./types";
+import { TruncatedText } from "./truncated-text";
 
 export function TikTokMockup({
   clientName,
@@ -103,12 +104,16 @@ export function TikTokMockup({
         <p className="text-white font-bold text-sm">
           @{clientName.toLowerCase().replace(/\s/g, "")}
         </p>
-        <p className={cn(
-          "text-white text-xs leading-relaxed mt-1 line-clamp-3",
-          !copy && "text-white/40 italic"
-        )}>
-          {displayCopy}
-        </p>
+        {copy ? (
+          <TruncatedText
+            text={displayCopy}
+            maxChars={120}
+            className="text-white text-xs leading-relaxed mt-1"
+            accentColor="text-white/70"
+          />
+        ) : (
+          <p className="text-white/40 italic text-xs leading-relaxed mt-1">{displayCopy}</p>
+        )}
         {hashtags && (
           <p className="text-white/70 text-xs mt-1">{hashtags}</p>
         )}

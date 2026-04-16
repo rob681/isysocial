@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MockupProps } from "./types";
+import { TruncatedText } from "./truncated-text";
 
 export function InstagramFeedMockup({
   clientName,
@@ -132,9 +133,15 @@ export function InstagramFeedMockup({
           <span className="font-semibold text-zinc-900 dark:text-zinc-100 mr-1">
             {clientName.toLowerCase().replace(/\s/g, "")}
           </span>
-          <span className={cn(!copy && "text-zinc-400 italic")}>
-            {displayCopy}
-          </span>
+          {copy ? (
+            <TruncatedText
+              text={displayCopy}
+              maxChars={130}
+              accentColor="text-zinc-500 dark:text-zinc-400"
+            />
+          ) : (
+            <span className="text-zinc-400 italic">{displayCopy}</span>
+          )}
         </p>
         {hashtags && (
           <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">{hashtags}</p>

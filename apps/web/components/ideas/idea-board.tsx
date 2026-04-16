@@ -37,9 +37,11 @@ interface IdeaBoardProps {
   canCreate?: boolean;
   canDrag?: boolean;
   initialClientId?: string;
+  filterMonth?: number;
+  filterYear?: number;
 }
 
-export function IdeaBoard({ basePath, canCreate = false, canDrag = false, initialClientId }: IdeaBoardProps) {
+export function IdeaBoard({ basePath, canCreate = false, canDrag = false, initialClientId, filterMonth, filterYear }: IdeaBoardProps) {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [networkFilter, setNetworkFilter] = useState<string>("all");
@@ -57,6 +59,8 @@ export function IdeaBoard({ basePath, canCreate = false, canDrag = false, initia
     search: search || undefined,
     network: networkFilter !== "all" ? (networkFilter as any) : undefined,
     clientId: clientFilter !== "all" ? clientFilter : undefined,
+    month: filterMonth,
+    year: filterYear,
   });
 
   const { data: clients } = trpc.ideas.getClientsForSelect.useQuery(undefined, {
@@ -180,7 +184,7 @@ export function IdeaBoard({ basePath, canCreate = false, canDrag = false, initia
           </div>
 
           {canCreate && (
-            <Link href={`${basePath}/nueva${initialClientId ? `?clientId=${initialClientId}` : ""}`}>
+            <Link href={`${basePath}/nueva${clientFilter !== "all" ? `?clientId=${clientFilter}` : ""}`}>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva idea

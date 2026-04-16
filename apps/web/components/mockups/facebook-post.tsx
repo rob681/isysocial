@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Globe, ThumbsUp, MessageCircle, Share2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MockupProps } from "./types";
+import { TruncatedText } from "./truncated-text";
 
 export function FacebookPostMockup({
   clientName,
@@ -53,12 +54,16 @@ export function FacebookPostMockup({
 
       {/* Copy */}
       <div className="px-3 pb-2">
-        <p className={cn(
-          "text-sm whitespace-pre-wrap",
-          !copy && "text-zinc-400 italic"
-        )}>
-          {fullText}
-        </p>
+        {copy ? (
+          <TruncatedText
+            text={fullText}
+            maxChars={250}
+            className="text-sm whitespace-pre-wrap text-zinc-900 dark:text-zinc-100"
+            accentColor="text-blue-600 dark:text-blue-400"
+          />
+        ) : (
+          <p className="text-sm text-zinc-400 italic">{fullText}</p>
+        )}
       </div>
 
       {/* Media — images: 4:5, video: native aspect ratio (Facebook supports vertical, horizontal, square) */}

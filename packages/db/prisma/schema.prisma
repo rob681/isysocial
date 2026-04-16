@@ -175,9 +175,11 @@ model AgencySocialAccount {
   tokenExpiresAt DateTime?
   tokenScope     String?
 
-  isActive    Boolean  @default(true)
-  connectedAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive      Boolean  @default(true)
+  tokenExpired  Boolean  @default(false) @map("token_expired")
+  tokenErrorMsg String?  @map("token_error_msg")
+  connectedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   publishLogs        PostPublishLog[]
   clientNetworkLinks ClientSocialNetwork[]
@@ -247,10 +249,11 @@ model User {
   ideaComments   IdeaComment[]
   videoComments  VideoComment[]     @relation("VideoCommentAuthor")
   postStatusLogs PostStatusLog[]
-  postRevisions  PostRevision[]
-  ideas          Idea[]             @relation("UserIdeas")
-  publishLogs    PostPublishLog[]
-  mediaVersions  PostMediaVersion[]
+  postRevisions    PostRevision[]
+  ideas            Idea[]             @relation("UserIdeas")
+  publishLogs      PostPublishLog[]
+  mediaVersions    PostMediaVersion[]
+  postAssignments  PostAssignment[]   @relation("UserPostAssignments")
 
   @@map("iso_users")
   @@schema("isysocial")
@@ -379,6 +382,10 @@ model ClientSocialNetwork {
   tokenScope     String? // Granted OAuth scopes (comma-separated)
   assignedAt     DateTime  @default(now())
 
+  // Token health — set when publishing detects OAuthException code 190
+  tokenExpired   Boolean   @default(false) @map("token_expired")
+  tokenErrorMsg  String?   @map("token_error_msg")
+
   publishLogs PostPublishLog[]
 
   @@unique([clientId, network, pageId]) // Allow multiple pages per network
@@ -408,9 +415,14 @@ model Post {
   // Surfaced via "Agregar contexto" toggle, never required.
   purpose String? @db.Text
 
-  status      PostStatus @default(DRAFT)
-  scheduledAt DateTime?
-  publishedAt DateTime?
+  status         PostStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  reviewDeadline DateTime?  @map("review_deadline")
+  publishedAt    DateTime?
+
+  // Publishing error tracking (JSON: { code, message, platform, timestamp, retryable })
+  // Set when a publish attempt fails, cleared on successful publish
+  publishError Json?
 
   // Performance tier — set either by daily cron (auto, percentiles per client+network)
   // or manually by admin/editor via "Marcar como top performer".
@@ -446,6 +458,7 @@ model Post {
   publishLogs         PostPublishLog[]
   insights            PostInsights[]
   guidedReviewSession GuidedReviewSession?
+  assignments         PostAssignment[]
 
   @@index([agencyId, clientId])
   @@index([agencyId, status])
@@ -454,6 +467,21 @@ model Post {
   @@index([isytaskTaskId])
   @@index([clientId, network, performanceTier])
   @@map("iso_posts")
+  @@schema("isysocial")
+}
+
+model PostAssignment {
+  id         String   @id @default(cuid())
+  postId     String   @map("post_id")
+  userId     String   @map("user_id")
+  role       String   @default("editor")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation("UserPostAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("iso_post_assignments")
   @@schema("isysocial")
 }
 

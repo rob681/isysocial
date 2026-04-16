@@ -4,6 +4,23 @@
 import type { PublishContext, PublishResult } from "./index";
 import { buildCaption } from "./index";
 
+/** Checks if a Meta API error response indicates a revoked / expired token */
+function isTokenExpiredError(data: any): boolean {
+  return (
+    data?.error?.code === 190 ||
+    data?.error?.message?.includes("session has been invalidated") ||
+    data?.error?.message?.includes("Error validating access token")
+  );
+}
+
+function tokenExpiredResult(context: string): PublishResult {
+  return {
+    success: false,
+    error: `TOKEN_EXPIRED: ${context}`,
+    requiresReconnect: true,
+  };
+}
+
 const GRAPH = "https://graph.facebook.com/v20.0";
 
 export async function publishToFacebook(ctx: PublishContext): Promise<PublishResult> {
@@ -50,6 +67,7 @@ async function publishSinglePhoto(
 
   const data = await res.json();
   if (!res.ok || data.error) {
+    if (isTokenExpiredError(data)) return tokenExpiredResult("publishSinglePhoto");
     return { success: false, error: data.error?.message ?? "Error al publicar foto en Facebook" };
   }
 
@@ -79,6 +97,7 @@ async function publishCarousel(
     });
     const data = await res.json();
     if (!res.ok || data.error) {
+      if (isTokenExpiredError(data)) return tokenExpiredResult("publishCarousel:upload");
       return { success: false, error: data.error?.message ?? "Error subiendo foto del carrusel" };
     }
     photoIds.push(data.id);
@@ -97,6 +116,7 @@ async function publishCarousel(
 
   const data = await res.json();
   if (!res.ok || data.error) {
+    if (isTokenExpiredError(data)) return tokenExpiredResult("publishCarousel:feed");
     return { success: false, error: data.error?.message ?? "Error publicando carrusel en Facebook" };
   }
 
@@ -126,6 +146,7 @@ async function publishVideo(
 
   const data = await res.json();
   if (!res.ok || data.error) {
+    if (isTokenExpiredError(data)) return tokenExpiredResult("publishVideo");
     return { success: false, error: data.error?.message ?? "Error publicando video en Facebook" };
   }
 
@@ -150,6 +171,7 @@ async function publishFeed(
 
   const data = await res.json();
   if (!res.ok || data.error) {
+    if (isTokenExpiredError(data)) return tokenExpiredResult("publishFeed");
     return { success: false, error: data.error?.message ?? "Error publicando en Facebook" };
   }
 

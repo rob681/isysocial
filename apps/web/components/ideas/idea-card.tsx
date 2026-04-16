@@ -2,16 +2,15 @@
 
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
-  Lightbulb,
   MessageCircle,
   Link2,
   Image,
   Calendar,
-  ArrowRight,
+  Play,
   User2,
 } from "lucide-react";
+import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 import {
   IDEA_STATUS_LABELS,
   IDEA_STATUS_COLORS,
@@ -36,10 +35,10 @@ interface IdeaCardProps {
       user?: { name: string; avatarUrl?: string | null } | null;
     } | null;
     isClientIdea?: boolean;
-    media?: { fileUrl: string }[];
+    media?: { fileUrl: string; mimeType?: string | null }[];
     _count?: { comments: number; links: number; media: number };
   };
-  basePath: string; // e.g., "/admin/ideas", "/editor/ideas"
+  basePath: string;
   isDraggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
 }
@@ -49,7 +48,9 @@ export function IdeaCard({ idea, basePath, isDraggable, onDragStart }: IdeaCardP
   const networkColor = idea.network
     ? NETWORK_COLORS[idea.network as SocialNetwork] || "#888"
     : null;
-  const thumbnail = idea.media?.[0]?.fileUrl;
+  const firstMedia = idea.media?.[0];
+  const thumbnail = firstMedia?.fileUrl;
+  const isVideo = firstMedia?.mimeType?.startsWith("video/") ?? false;
 
   return (
     <Link href={`${basePath}/${idea.id}`}>
@@ -61,14 +62,29 @@ export function IdeaCard({ idea, basePath, isDraggable, onDragStart }: IdeaCardP
         draggable={isDraggable}
         onDragStart={onDragStart}
       >
-        {/* Hero image - full bleed, larger and more prominent */}
+        {/* Hero media thumbnail — full bleed */}
         {thumbnail && (
-          <div className="w-full h-40 bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-            <img
-              src={thumbnail}
-              alt=""
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
+          <div className="w-full h-40 bg-zinc-900 overflow-hidden relative flex items-center justify-center">
+            {isVideo ? (
+              <>
+                <VideoThumbnail
+                  src={thumbnail}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                {/* Play overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow">
+                    <Play className="h-4 w-4 text-zinc-800 ml-0.5" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <img
+                src={thumbnail}
+                alt=""
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+            )}
           </div>
         )}
 
@@ -142,7 +158,6 @@ export function IdeaCard({ idea, basePath, isDraggable, onDragStart }: IdeaCardP
                 {idea._count!.links}
               </span>
             )}
-            {/* Show media count only if no thumbnail visible */}
             {!thumbnail && (idea._count?.media ?? 0) > 0 && (
               <span className="flex items-center gap-1">
                 <Image className="h-3 w-3" />

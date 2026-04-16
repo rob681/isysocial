@@ -6,6 +6,7 @@ export interface PublishResult {
   platformPostId?: string;
   platformUrl?: string;
   error?: string;
+  requiresReconnect?: boolean; // true when OAuthException code 190 (token invalidated)
 }
 
 export interface PublishContext {

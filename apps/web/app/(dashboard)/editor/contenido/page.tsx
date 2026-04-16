@@ -23,7 +23,12 @@ import {
   Calendar,
   MessageCircle,
   Filter,
+  UserX,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   NETWORK_LABELS,
   NETWORK_COLORS,
@@ -51,12 +56,43 @@ function NuevoLink({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function EditorContenidoPage() {
+function EditorContenidoInner() {
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get("clientId") ?? undefined;
+
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const [filterMonth, setFilterMonth] = useState<number>(currentMonth);
+  const [filterYear, setFilterYear] = useState<number>(currentYear);
+
+  function goToPrevMonth() {
+    if (filterMonth === 1) {
+      setFilterMonth(12);
+      setFilterYear((y) => y - 1);
+    } else {
+      setFilterMonth((m) => m - 1);
+    }
+    setPage(1);
+  }
+
+  function goToNextMonth() {
+    if (filterYear === currentYear && filterMonth === currentMonth) return;
+    if (filterMonth === 12) {
+      setFilterMonth(1);
+      setFilterYear((y) => y + 1);
+    } else {
+      setFilterMonth((m) => m + 1);
+    }
+    setPage(1);
+  }
+
+  // Reset page when clientId changes
+  useEffect(() => { setPage(1); }, [clientId]);
 
   useEffect(() => {
     const saved = localStorage.getItem("isysocial-content-view");
@@ -67,16 +103,28 @@ export default function EditorContenidoPage() {
     localStorage.setItem("isysocial-content-view", v);
   };
 
+  const { data: assignmentsData } = trpc.editors.myAssignedClients.useQuery();
+  const hasNoAssignments =
+    assignmentsData !== undefined &&
+    !assignmentsData.hasManageAll &&
+    Array.isArray(assignmentsData.clients) &&
+    assignmentsData.clients.length === 0;
+
+  // Lookup client name if filtering by a specific client
+  const clientName = clientId
+    ? assignmentsData?.clients?.find((c) => c.id === clientId)?.companyName
+    : undefined;
+
   const { data, isLoading } = trpc.posts.list.useQuery({
+    clientId,   // ← filtra por cliente si viene en la URL
     search: search || undefined,
     network: filterNetwork !== "ALL" ? (filterNetwork as SocialNetwork) : undefined,
     status: filterStatus !== "ALL" ? (filterStatus as PostStatus) : undefined,
     page,
     limit: 20,
+    month: filterMonth,
+    year: filterYear,
   });
-
-  // Note: clientId filtering happens at the NuevoLink level (for new post navigation).
-  // The listing itself shows all posts assigned to this editor (backend filters by role).
 
   return (
     <div className="flex flex-col flex-1">
@@ -85,9 +133,13 @@ export default function EditorContenidoPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Mis Contenidos</h1>
+          <h1 className="text-2xl font-bold">
+            {clientName ? `Contenido — ${clientName}` : "Mis Contenidos"}
+          </h1>
           <p className="text-muted-foreground text-sm">
-            Gestiona los posts de tus clientes asignados
+            {clientName
+              ? `Publicaciones de ${clientName}`
+              : "Gestiona los posts de tus clientes asignados"}
           </p>
         </div>
         <NuevoLink>
@@ -136,6 +188,24 @@ export default function EditorContenidoPage() {
           </SelectContent>
         </Select>
 
+        {/* Month navigator */}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={goToPrevMonth} className="p-1 rounded hover:bg-muted">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium min-w-[120px] text-center capitalize">
+            {format(new Date(filterYear, filterMonth - 1), "MMMM yyyy", { locale: es })}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            disabled={filterYear === currentYear && filterMonth === currentMonth}
+            className="p-1 rounded hover:bg-muted disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
         <div className="flex-1" />
         <ViewToggle view={viewMode} onChange={handleViewChange} />
       </div>
@@ -147,6 +217,16 @@ export default function EditorContenidoPage() {
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
           ))}
         </div>
+      ) : hasNoAssignments ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <UserX className="h-12 w-12 text-amber-400 mb-4" />
+            <p className="text-lg font-semibold">Sin clientes asignados</p>
+            <p className="text-sm text-muted-foreground mt-1 text-center max-w-sm">
+              Aún no tienes clientes asignados. Contacta al administrador para que te asigne a uno o más clientes.
+            </p>
+          </CardContent>
+        </Card>
       ) : !data || data.posts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -285,5 +365,20 @@ export default function EditorContenidoPage() {
       )}
       </main>
     </div>
+  );
+}
+
+export default function EditorContenidoPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col flex-1">
+        <Topbar title="Contenido" />
+        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
+        </main>
+      </div>
+    }>
+      <EditorContenidoInner />
+    </Suspense>
   );
 }

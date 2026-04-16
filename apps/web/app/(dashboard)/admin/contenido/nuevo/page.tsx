@@ -12,6 +12,7 @@ function NuevoPostContent() {
   return (
     <PostEditor
       defaultValues={clientId ? { clientId } : undefined}
+      successRedirectBase="/admin/contenido"
     />
   );
 }

@@ -5,6 +5,7 @@ import {
   protectedProcedure,
   getAgencyId,
   adminOrPermissionProcedure,
+  adminProcedure,
 } from "../trpc";
 import {
   createPostSchema,
@@ -19,6 +20,25 @@ import { sendPushNotification } from "../lib/fcm";
 import { notifyIsytask, buildPostPayload } from "../lib/cross-app-notify";
 import { publishToNetwork } from "../lib/publishers";
 import { broadcastEvent } from "../lib/realtime-events";
+import { getPublicUrlFromPath } from "../lib/supabase-storage";
+
+// ─── Helper: replace fileUrl with a public URL for each media item ───────────
+// Uses public URLs (never expire) since isysocial-media bucket is PUBLIC
+function enrichMediaWithPublicUrls<
+  T extends { fileUrl?: string | null; storagePath?: string | null },
+>(mediaItems: T[]): T[] {
+  return mediaItems.map((item) => {
+    if (item.storagePath) {
+      try {
+        const publicUrl = getPublicUrlFromPath(item.storagePath);
+        return { ...item, fileUrl: publicUrl };
+      } catch {
+        return item; // keep original on failure
+      }
+    }
+    return item;
+  });
+}
 
 export const postsRouter = router({
   // ─── Create Post ─────────────────────────────────────────────────────────
@@ -33,21 +53,6 @@ export const postsRouter = router({
       });
       if (!client) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado" });
-      }
-
-      // Validate client has assigned pages for the selected network
-      const clientNetwork = await ctx.db.clientSocialNetwork.findFirst({
-        where: {
-          clientId: input.clientId,
-          network: input.network,
-          isActive: true,
-        },
-      });
-      if (!clientNetwork) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `El cliente no tiene páginas asignadas para ${input.network}`,
-        });
       }
 
       const initialStatus = input.initialStatus || "DRAFT";
@@ -135,7 +140,10 @@ export const postsRouter = router({
         post.comments = [];
       }
 
-      return post;
+      // Enrich media with signed URLs
+      const enrichedMedia = await enrichMediaWithPublicUrls(post.media);
+
+      return { ...post, media: enrichedMedia };
     }),
 
   // ─── List Posts ──────────────────────────────────────────────────────────
@@ -184,6 +192,8 @@ export const postsRouter = router({
             where: { editor: { userId: user.id } },
             select: { clientId: true },
           });
+          // Strict: editor only sees their assigned clients
+          // If no assignments → empty results (admin must assign clients first)
           where.clientId = { in: assignments.map((a) => a.clientId) };
         }
       }
@@ -249,15 +259,47 @@ export const postsRouter = router({
               },
             },
             category: true,
-            media: { take: 1, orderBy: { sortOrder: "asc" } },
+            media: {
+              take: 1,
+              orderBy: { sortOrder: "asc" },
+              select: { id: true, fileUrl: true, mimeType: true, storagePath: true },
+            },
             _count: { select: { comments: true } },
           },
         }),
         ctx.db.post.count({ where }),
       ]);
 
+      // Enrich thumbnail media with public URLs + infer mimeType from extension if missing
+      const enrichedPosts = posts.map((post) => {
+        const enrichedMedia = enrichMediaWithPublicUrls(post.media).map((m) => {
+          // If mimeType is missing, infer from file extension
+          if (!m.mimeType && m.fileUrl) {
+            const ext = m.fileUrl.split(".").pop()?.toLowerCase();
+            const mimeMap: Record<string, string> = {
+              mp4: "video/mp4",
+              webm: "video/webm",
+              mov: "video/quicktime",
+              avi: "video/x-msvideo",
+              jpg: "image/jpeg",
+              jpeg: "image/jpeg",
+              png: "image/png",
+              gif: "image/gif",
+              webp: "image/webp",
+            };
+            return { ...m, mimeType: mimeMap[ext || ""] || null };
+          }
+          return m;
+        });
+
+        return {
+          ...post,
+          media: enrichedMedia,
+        };
+      });
+
       return {
-        posts,
+        posts: enrichedPosts,
         total,
         pages: Math.ceil(total / input.limit),
         page: input.page,
@@ -383,6 +425,11 @@ export const postsRouter = router({
 
       let statusToUpdate = toStatus;
       const updateData: any = { status: toStatus };
+
+      // Set reviewDeadline (48h) when first entering IN_REVIEW — don't overwrite if already set
+      if (toStatus === "IN_REVIEW" && !post.reviewDeadline) {
+        updateData.reviewDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      }
 
       // ── Auto-schedule on approval ──────────────────────────────────────────
       // If post is approved AND has a scheduled date, move directly to SCHEDULED
@@ -1890,5 +1937,88 @@ export const postsRouter = router({
         data: { status: input.status as any },
       });
       return { success: true };
+    }),
+
+  // ─── Get Post Assignments ─────────────────────────────────────────────────
+  getAssignments: protectedProcedure
+    .input(z.object({ postId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const post = await ctx.db.post.findFirst({
+        where: { id: input.postId, agencyId },
+        select: { id: true },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const assignments = await ctx.db.postAssignment.findMany({
+        where: { postId: input.postId },
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true, role: true } },
+        },
+        orderBy: { assignedAt: "asc" },
+      });
+
+      return assignments.map((a) => ({
+        id: a.id,
+        postId: a.postId,
+        userId: a.userId,
+        role: a.role,
+        assignedAt: a.assignedAt,
+        userName: a.user.name,
+        userAvatar: a.user.avatarUrl,
+        userRole: a.user.role,
+      }));
+    }),
+
+  // ─── List Available Editors for Assign Dropdown ───────────────────────────
+  listEditors: protectedProcedure.query(async ({ ctx }) => {
+    const agencyId = getAgencyId(ctx);
+    const users = await ctx.db.user.findMany({
+      where: {
+        agencyId,
+        isActive: true,
+        role: { in: ["EDITOR", "ADMIN"] },
+      },
+      select: { id: true, name: true, role: true, avatarUrl: true },
+      orderBy: { name: "asc" },
+    });
+    return users;
+  }),
+
+  // ─── Assign Editor to Post ────────────────────────────────────────────────
+  assignEditor: adminProcedure
+    .input(z.object({
+      postId: z.string(),
+      userId: z.string(),
+      role: z.enum(["editor", "reviewer", "designer"]).default("editor"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const post = await ctx.db.post.findFirst({
+        where: { id: input.postId, agencyId },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return ctx.db.postAssignment.upsert({
+        where: { postId_userId: { postId: input.postId, userId: input.userId } },
+        create: { postId: input.postId, userId: input.userId, role: input.role },
+        update: { role: input.role },
+      });
+    }),
+
+  // ─── Remove Editor from Post ──────────────────────────────────────────────
+  removeEditor: adminProcedure
+    .input(z.object({ postId: z.string(), userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const post = await ctx.db.post.findFirst({
+        where: { id: input.postId, agencyId },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+
+      await ctx.db.postAssignment.deleteMany({
+        where: { postId: input.postId, userId: input.userId },
+      });
+      return { ok: true };
     }),
 });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { MessageCircle, Repeat2, Heart, BarChart3, Share, Bookmark, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MockupProps } from "./types";
+import { TruncatedText } from "./truncated-text";
 
 export function XPostMockup({
   clientName,
@@ -59,12 +60,16 @@ export function XPostMockup({
           </div>
 
           {/* Content */}
-          <p className={cn(
-            "text-sm whitespace-pre-wrap leading-relaxed",
-            !copy && "text-zinc-400 italic"
-          )}>
-            {fullText}
-          </p>
+          {copy ? (
+            <TruncatedText
+              text={fullText}
+              maxChars={280}
+              className="text-sm whitespace-pre-wrap leading-relaxed text-zinc-900 dark:text-zinc-100"
+              accentColor="text-blue-500 dark:text-blue-400"
+            />
+          ) : (
+            <p className="text-sm text-zinc-400 italic">{fullText}</p>
+          )}
 
           {/* Media */}
           {currentMedia ? (

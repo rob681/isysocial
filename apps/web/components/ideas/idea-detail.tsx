@@ -293,7 +293,7 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
         </div>
 
         {/* Right: Sketch mockup + Media + Links */}
-        <div className="lg:w-[380px] flex-shrink-0 space-y-6">
+        <div className="lg:w-[440px] flex-shrink-0 space-y-6">
           {/* Sketch mockup — idea visual summary */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground px-1">Vista de idea</p>

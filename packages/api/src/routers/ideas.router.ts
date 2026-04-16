@@ -12,6 +12,26 @@ import {
   addIdeaLinkSchema,
 } from "@isysocial/shared";
 import type { Role } from "@isysocial/shared";
+import { getSignedUrl } from "../lib/supabase-storage";
+
+// ─── Helper: replace fileUrl with a signed URL for each media item ───────────
+async function enrichMediaWithSignedUrls<
+  T extends { fileUrl?: string | null; storagePath?: string | null },
+>(mediaItems: T[]): Promise<T[]> {
+  return Promise.all(
+    mediaItems.map(async (item) => {
+      if (item.storagePath) {
+        try {
+          const signedUrl = await getSignedUrl(item.storagePath, 3600);
+          return { ...item, fileUrl: signedUrl };
+        } catch {
+          return item; // keep original on failure
+        }
+      }
+      return item;
+    })
+  );
+}
 
 export const ideasRouter = router({
   // ─── Create Idea (Agency) ───────────────────────────────────────────────
@@ -128,7 +148,10 @@ export const ideasRouter = router({
         }
       }
 
-      return idea;
+      // Enrich media with signed URLs
+      const enrichedMedia = await enrichMediaWithSignedUrls(idea.media);
+
+      return { ...idea, media: enrichedMedia };
     }),
 
   // ─── List Ideas ───────────────────────────────────────────────────────────
@@ -139,6 +162,8 @@ export const ideasRouter = router({
         status: z.enum(["BACKLOG", "IN_PROGRESS", "READY", "CONVERTED", "DISCARDED"]).optional(),
         network: z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"]).optional(),
         search: z.string().optional(),
+        month: z.number().int().min(1).max(12).optional(),
+        year: z.number().int().optional(),
         page: z.number().int().min(1).default(1),
         limit: z.number().int().min(1).max(100).default(50),
       })
@@ -164,9 +189,11 @@ export const ideasRouter = router({
             select: { clientId: true },
           });
           const clientIds = assignments.map((a) => a.clientId);
+          // Strict: editor only sees their assigned clients + ideas without client
+          // If no assignments → only sees ideas with clientId: null
           where.OR = [
             { clientId: { in: clientIds } },
-            { clientId: null }, // Ideas without client are visible to all
+            { clientId: null }, // Ideas without client are always visible
           ];
         }
       }
@@ -194,6 +221,15 @@ export const ideasRouter = router({
           ...(where.OR || []),
           { network: input.network },
           { networks: { has: input.network } },
+        ];
+      }
+
+      if (input.month && input.year) {
+        const startDate = new Date(input.year, input.month - 1, 1);
+        const endDate = new Date(input.year, input.month, 1);
+        where.AND = [
+          ...(where.AND || []),
+          { createdAt: { gte: startDate, lt: endDate } },
         ];
       }
 
@@ -230,8 +266,16 @@ export const ideasRouter = router({
         ctx.db.idea.count({ where }),
       ]);
 
+      // Enrich thumbnail media with signed URLs
+      const enrichedIdeas = await Promise.all(
+        ideas.map(async (idea) => ({
+          ...idea,
+          media: await enrichMediaWithSignedUrls(idea.media),
+        }))
+      );
+
       return {
-        ideas,
+        ideas: enrichedIdeas,
         total,
         pages: Math.ceil(total / input.limit),
         page: input.page,

@@ -232,6 +232,18 @@ export const publishingRouter = router({
           },
         });
 
+        // If token expired, mark the ClientSocialNetwork as expired so UI can warn
+        if (publishResult.requiresReconnect) {
+          await ctx.db.clientSocialNetwork.update({
+            where: { id: sn.id },
+            data: {
+              isActive: false,
+              tokenExpired: true,
+              tokenErrorMsg: "Token expirado o revocado. Reconecta la cuenta para seguir publicando.",
+            },
+          });
+        }
+
         if (publishResult.success) anySuccess = true;
 
         results.push({
@@ -292,6 +304,16 @@ export const publishingRouter = router({
           },
         });
 
+        // If token expired, mark the AgencySocialAccount as inactive
+        if (publishResult.requiresReconnect) {
+          await ctx.db.agencySocialAccount.update({
+            where: { id: sn.id },
+            data: {
+              isActive: false,
+            },
+          });
+        }
+
         if (publishResult.success) anySuccess = true;
 
         results.push({
@@ -304,14 +326,37 @@ export const publishingRouter = router({
         });
       }
 
-      // Update post status to PUBLISHED if at least one network succeeded
+      // Collect failures for error tracking
+      const failures = results.filter((r) => r.status === "FAILED");
+      const hasErrors = failures.length > 0;
+
+      // Update post with error tracking
+      const updateData: any = {};
       if (anySuccess) {
+        updateData.status = "PUBLISHED";
+        updateData.publishError = null; // Clear errors on success
+      }
+      if (hasErrors && !anySuccess) {
+        // Only set error if ALL networks failed
+        updateData.publishError = {
+          timestamp: new Date().toISOString(),
+          failures: failures.map((f) => ({
+            network: f.network,
+            error: f.error,
+          })),
+          retryable: true,
+        };
+      }
+
+      if (Object.keys(updateData).length > 0) {
         await ctx.db.post.update({
           where: { id: post.id },
-          data: { status: "PUBLISHED" },
+          data: updateData,
         });
+      }
 
-        // Log status change
+      // Log status change only if successful
+      if (anySuccess) {
         await ctx.db.postStatusLog.create({
           data: {
             postId: post.id,
@@ -423,6 +468,25 @@ export const publishingRouter = router({
           publishedAt: result.success ? new Date() : null,
         },
       });
+
+      // If token expired, mark the social network record accordingly
+      if (result.requiresReconnect) {
+        if (log.networkId) {
+          await ctx.db.clientSocialNetwork.update({
+            where: { id: log.networkId },
+            data: {
+              isActive: false,
+              tokenExpired: true,
+              tokenErrorMsg: "Token expirado o revocado. Reconecta la cuenta para seguir publicando.",
+            },
+          });
+        } else if (log.agencyAccountId) {
+          await ctx.db.agencySocialAccount.update({
+            where: { id: log.agencyAccountId },
+            data: { isActive: false },
+          });
+        }
+      }
 
       // If success, update post to PUBLISHED
       if (result.success) {
@@ -684,5 +748,64 @@ export const publishingRouter = router({
       }
 
       return { batchId: input.batchId, publishedCount: posts.length, results: batchResults };
+    }),
+
+  // ─── List social accounts with expired tokens (for admin warning UI) ──────
+  getExpiredTokens: protectedProcedure
+    .query(async ({ ctx }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const expired = await ctx.db.clientSocialNetwork.findMany({
+        where: {
+          client: { agencyId },
+          tokenExpired: true,
+        },
+        select: {
+          id: true,
+          network: true,
+          accountName: true,
+          profilePic: true,
+          tokenErrorMsg: true,
+          isActive: true,
+          client: {
+            select: {
+              id: true,
+              companyName: true,
+            },
+          },
+        },
+        orderBy: { assignedAt: "desc" },
+      });
+
+      return expired;
+    }),
+
+  // ─── Clear tokenExpired flag after reconnect ──────────────────────────────
+  clearTokenExpired: protectedProcedure
+    .input(z.object({ networkId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      // Verify the network belongs to a client of this agency
+      const network = await ctx.db.clientSocialNetwork.findFirst({
+        where: {
+          id: input.networkId,
+          client: { agencyId },
+        },
+      });
+      if (!network) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Red social no encontrada" });
+      }
+
+      await ctx.db.clientSocialNetwork.update({
+        where: { id: input.networkId },
+        data: {
+          tokenExpired: false,
+          tokenErrorMsg: null,
+          isActive: true,
+        },
+      });
+
+      return { ok: true };
     }),
 });

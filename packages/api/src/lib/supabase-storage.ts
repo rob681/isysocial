@@ -67,8 +67,28 @@ export async function createSignedUploadUrl(
 }
 
 /**
+ * Generate a permanent public URL for a stored file.
+ * Use for PUBLIC buckets (never expires).
+ * @param storagePath  Full path: "bucket/folder/file.ext"
+ */
+export function getPublicUrlFromPath(storagePath: string): string {
+  const supabase = getClient();
+
+  const slashIdx = storagePath.indexOf("/");
+  if (slashIdx === -1) {
+    throw new Error(`Invalid storagePath: ${storagePath}`);
+  }
+  const bucket = storagePath.substring(0, slashIdx);
+  const filePath = storagePath.substring(slashIdx + 1);
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+/**
  * Generate a signed download URL for a stored file.
  * Useful as fallback when the bucket is not set to public.
+ * WARNING: URLs expire after expiresIn seconds (default 1 hour)
  * @param storagePath  Full path: "bucket/folder/file.ext"
  * @param expiresIn    Expiry in seconds (default 3600 = 1h)
  */

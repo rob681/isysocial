@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
-import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, RotateCcw, ArrowRight, Mail, Bell, FlaskConical, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Building2, Palette, Save, Plus, Pencil, Trash2, Tag, Upload, X, ImageIcon, Globe, Share2, RotateCcw, ArrowRight, Mail, Bell, FlaskConical, CheckCircle2, Eye, EyeOff, AlertTriangle, RefreshCw, WifiOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -172,6 +172,31 @@ function EmailSettingsSection() {
           </div>
         ) : (
           <>
+            {/* ⚠️ Warning: no API key configured */}
+            {!settings?.resendApiKey && (
+              <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    Emails desactivados — falta la API Key de Resend
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                    Ningún email de notificación se enviará hasta que configures una API Key válida.
+                    Obtén la tuya en{" "}
+                    <a
+                      href="https://resend.com/api-keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      resend.com/api-keys
+                    </a>{" "}
+                    e ingrésala en el campo de abajo.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Master toggle */}
             <div className="flex items-center justify-between py-2 border-b">
               <div>
@@ -663,6 +688,91 @@ function LogoUploadSection({
   );
 }
 
+/* ─── TokenExpiredAlertsSection ──────────────────────────────────── */
+function TokenExpiredAlertsSection() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const utils = trpc.useUtils();
+
+  const { data: expiredAccounts, isLoading } = trpc.publishing.getExpiredTokens.useQuery();
+
+  const clearExpired = trpc.publishing.clearTokenExpired.useMutation({
+    onSuccess: () => {
+      utils.publishing.getExpiredTokens.invalidate();
+      toast({ title: "Token reiniciado", description: "Reconecta la cuenta para restaurar la publicación." });
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading || !expiredAccounts || expiredAccounts.length === 0) return null;
+
+  const networkLabel: Record<string, string> = {
+    FACEBOOK: "Facebook",
+    INSTAGRAM: "Instagram",
+    LINKEDIN: "LinkedIn",
+    TIKTOK: "TikTok",
+    X: "X (Twitter)",
+  };
+
+  return (
+    <Card className="border-amber-300 dark:border-amber-700/60">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+          <WifiOff className="h-4 w-4" />
+          Tokens de redes sociales expirados
+        </CardTitle>
+        <CardDescription>
+          Las siguientes cuentas tienen tokens revocados o expirados y no pueden publicar. Reconecta cada cuenta para restaurar la publicación.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {expiredAccounts.map((account) => (
+          <div
+            key={account.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              {account.profilePic ? (
+                <img src={account.profilePic} alt="" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {account.accountName ?? networkLabel[account.network] ?? account.network}
+                  <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                    ({networkLabel[account.network] ?? account.network})
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {account.client.companyName}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400 dark:border-amber-600 text-xs whitespace-nowrap">
+                Token expirado
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 px-2"
+                onClick={() => router.push(`/admin/clientes/${account.client.id}?tab=redes`)}
+              >
+                <RefreshCw className="h-3 w-3 mr-1.5" />
+                Reconectar
+              </Button>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ─── SocialNetworksRedirectCard ──────────────────────────────────── */
 function SocialNetworksRedirectCard() {
   const router = useRouter();
@@ -730,111 +840,6 @@ const TIMEZONES = [
   { value: "Europe/London", label: "Londres (GMT+0)" },
 ];
 
-/* ─── MetaApiTestSection ─────────────────────────────────────────── */
-function MetaApiTestSection() {
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<any>(null);
-
-  const runTests = async () => {
-    setLoading(true);
-    setResults(null);
-    try {
-      const res = await fetch("/api/social/meta/test-calls");
-      const data = await res.json();
-      setResults(data);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <FlaskConical className="h-5 w-5 text-primary" />
-          Pruebas obligatorias — Meta Graph API
-        </CardTitle>
-        <CardDescription>
-          Ejecuta las llamadas requeridas por Meta App Review para demostrar el uso de cada permiso.
-          Toma una captura o graba la pantalla para incluir en la revisión.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Button onClick={runTests} disabled={loading} variant="outline">
-          {loading ? (
-            <><Loader2 className="h-4 w-4 animate-spin mr-2" />Ejecutando pruebas...</>
-          ) : (
-            <><FlaskConical className="h-4 w-4 mr-2" />Ejecutar llamadas de prueba</>
-          )}
-        </Button>
-
-        {results && (
-          <div className="space-y-3">
-            {/* Summary */}
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-green-600 font-medium">✓ {results.summary?.passed} exitosas</span>
-              <span className="text-red-500 font-medium">✗ {results.summary?.failed} fallidas</span>
-              {results.summary?.skipped > 0 && (
-                <span className="text-muted-foreground">— {results.summary?.skipped} omitidas</span>
-              )}
-            </div>
-
-            {/* Accounts info */}
-            {results.meta && (
-              <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 space-y-1">
-                <p>Cuenta Facebook: {results.meta.fbAccount?.name ?? "No conectada"} {results.meta.fbAccount?.pageId && `(Page ID: ${results.meta.fbAccount.pageId})`}</p>
-                <p>Cuenta Instagram: {results.meta.igAccount?.name ?? "No conectada"} {results.meta.igAccount?.id && `(IG ID: ${results.meta.igAccount.id})`}</p>
-                <p className="text-muted-foreground/60">Ejecutado: {results.meta.testedAt}</p>
-              </div>
-            )}
-
-            {/* Error if no accounts */}
-            {results.error && (
-              <p className="text-sm text-red-500">{results.error}</p>
-            )}
-
-            {/* Results list */}
-            {(results.results ?? []).map((r: any, i: number) => (
-              <div key={i} className="border rounded-lg p-3 space-y-1">
-                <div className="flex items-center gap-2">
-                  {r.status === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  ) : r.status === "error" ? (
-                    <X className="h-4 w-4 text-red-500 flex-shrink-0" />
-                  ) : (
-                    <span className="w-4 h-4 text-muted-foreground text-xs flex-shrink-0">—</span>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="text-xs font-mono">{r.permission}</Badge>
-                      {r.httpStatus && (
-                        <span className={`text-xs font-medium ${r.httpStatus >= 200 && r.httpStatus < 300 ? "text-green-600" : "text-red-500"}`}>
-                          HTTP {r.httpStatus}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{r.method} {r.endpoint}</p>
-                  </div>
-                </div>
-                {r.data && (
-                  <pre className="text-xs bg-muted/50 rounded p-2 overflow-x-auto max-h-32">
-                    {JSON.stringify(r.data, null, 2)}
-                  </pre>
-                )}
-                {r.error && (
-                  <p className="text-xs text-red-500">{r.error}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 /* ─── ConfiguracionPage ──────────────────────────────────────────── */
 export default function ConfiguracionPage() {
@@ -1064,14 +1069,14 @@ function ConfiguracionContent() {
               </CardContent>
             </Card>
 
+            {/* Token expiry alerts */}
+            <TokenExpiredAlertsSection />
+
             {/* Social connections — managed per client */}
             <SocialNetworksRedirectCard />
 
             {/* Email / Resend Settings */}
             <EmailSettingsSection />
-
-            {/* Meta Graph API Test Calls */}
-            <MetaApiTestSection />
 
             {/* Categories */}
             <CategoriesSection />

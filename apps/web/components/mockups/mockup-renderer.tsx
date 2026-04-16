@@ -8,6 +8,7 @@ import { InstagramReelMockup } from "./instagram-reel";
 import { LinkedInPostMockup } from "./linkedin-post";
 import { TikTokMockup } from "./tiktok-post";
 import { XPostMockup } from "./x-post";
+import { MockupExpandable } from "./mockup-expandable";
 import type { MockupProps } from "./types";
 
 interface MockupRendererProps extends MockupProps {
@@ -20,32 +21,27 @@ export function MockupRenderer({
   postType,
   ...mockupProps
 }: MockupRendererProps) {
+  let mockup: React.ReactNode;
+
   // Instagram has 3 variants based on post type
   if (network === "INSTAGRAM") {
     if (postType === "STORY") {
-      return <InstagramStoryMockup {...mockupProps} />;
+      mockup = <InstagramStoryMockup {...mockupProps} />;
+    } else if (postType === "REEL") {
+      mockup = <InstagramReelMockup {...mockupProps} />;
+    } else {
+      mockup = <InstagramFeedMockup {...mockupProps} />;
     }
-    if (postType === "REEL") {
-      return <InstagramReelMockup {...mockupProps} />;
-    }
-    return <InstagramFeedMockup {...mockupProps} />;
+  } else if (network === "TIKTOK") {
+    mockup = <TikTokMockup {...mockupProps} />;
+  } else if (network === "LINKEDIN") {
+    mockup = <LinkedInPostMockup {...mockupProps} />;
+  } else if (network === "X") {
+    mockup = <XPostMockup {...mockupProps} />;
+  } else {
+    // Facebook (default)
+    mockup = <FacebookPostMockup {...mockupProps} />;
   }
 
-  // TikTok always uses vertical format
-  if (network === "TIKTOK") {
-    return <TikTokMockup {...mockupProps} />;
-  }
-
-  // LinkedIn
-  if (network === "LINKEDIN") {
-    return <LinkedInPostMockup {...mockupProps} />;
-  }
-
-  // X (Twitter)
-  if (network === "X") {
-    return <XPostMockup {...mockupProps} />;
-  }
-
-  // Facebook (default)
-  return <FacebookPostMockup {...mockupProps} />;
+  return <MockupExpandable>{mockup}</MockupExpandable>;
 }

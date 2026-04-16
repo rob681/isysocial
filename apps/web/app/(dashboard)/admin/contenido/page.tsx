@@ -24,6 +24,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ErrorNotificationCard } from "@/components/error-notification-card";
 import {
   Plus,
   Search,
@@ -41,9 +43,13 @@ import {
   Loader2,
   Download,
   Film,
-  Users,
   Play,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 import {
   NETWORK_LABELS,
   NETWORK_COLORS,
@@ -193,37 +199,14 @@ function BulkActionBar({
   );
 }
 
-/* ─── No client selected ─────────────────────────────────────────── */
-function NoClientSelected() {
-  return (
-    <div className="flex flex-col flex-1">
-      <Topbar title="Contenido" />
-      <main className="flex-1 p-4 md:p-6 lg:p-8 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-            <Users className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-xl font-semibold mb-2">Selecciona un cliente</h2>
-          <p className="text-muted-foreground text-sm">
-            Elige un cliente desde la barra lateral para ver y gestionar su contenido.
-          </p>
-        </div>
-      </main>
-    </div>
-  );
-}
-
 /* ─── Page ────────────────────────────────────────────────────────── */
 function ContenidoPageInner() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get("clientId") ?? undefined;
-
-  if (!clientId) return <NoClientSelected />;
-
   return <ContenidoWithClient clientId={clientId} />;
 }
 
-function ContenidoWithClient({ clientId }: { clientId: string }) {
+function ContenidoWithClient({ clientId }: { clientId?: string }) {
   const [search, setSearch] = useState("");
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
@@ -232,7 +215,34 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const [filterMonth, setFilterMonth] = useState<number>(currentMonth);
+  const [filterYear, setFilterYear] = useState<number>(currentYear);
 
+  function goToPrevMonth() {
+    if (filterMonth === 1) {
+      setFilterMonth(12);
+      setFilterYear((y) => y - 1);
+    } else {
+      setFilterMonth((m) => m - 1);
+    }
+    setPage(1);
+  }
+
+  function goToNextMonth() {
+    if (filterYear === currentYear && filterMonth === currentMonth) return;
+    if (filterMonth === 12) {
+      setFilterMonth(1);
+      setFilterYear((y) => y + 1);
+    } else {
+      setFilterMonth((m) => m + 1);
+    }
+    setPage(1);
+  }
+
+  const [errorSheetOpen, setErrorSheetOpen] = useState(false);
+  const [selectedErrorPost, setSelectedErrorPost] = useState<any>(null);
   // Reset page when clientId changes (navigation between clients)
   useEffect(() => {
     setPage(1);
@@ -252,7 +262,7 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
   const { data: categories } = trpc.categories.list.useQuery();
 
   const { data: clientData } = trpc.clients.get.useQuery(
-    { id: clientId! },
+    { id: clientId ?? "" },
     { enabled: !!clientId }
   );
 
@@ -264,6 +274,8 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
     clientId,
     page,
     limit: 20,
+    month: filterMonth,
+    year: filterYear,
   });
 
   // Kanban mode: fetch all posts without status filter and with higher limit
@@ -274,6 +286,8 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
     clientId,
     page: 1,
     limit: 200,
+    month: filterMonth,
+    year: filterYear,
   }, { enabled: viewMode === "kanban" });
 
   const updateStatusMutation = trpc.posts.updateStatus.useMutation({
@@ -335,6 +349,18 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
   }
 
   const allSelected = data?.posts?.length ? data.posts.every((p) => selectedIds.has(p.id)) : false;
+
+  function handleErrorClick(post: any) {
+    setSelectedErrorPost(post);
+    setErrorSheetOpen(true);
+  }
+
+  function handleRetryPublish() {
+    if (!selectedErrorPost) return;
+    // TODO: Implement retry logic using publishingRouter.publish
+    // For now, just close the sheet
+    setErrorSheetOpen(false);
+  }
 
   return (
     <div className="flex flex-col flex-1">
@@ -460,6 +486,24 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
           </Select>
         )}
 
+        {/* Month navigator */}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={goToPrevMonth} className="p-1 rounded hover:bg-muted">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium min-w-[120px] text-center capitalize">
+            {format(new Date(filterYear, filterMonth - 1), "MMMM yyyy", { locale: es })}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            disabled={filterYear === currentYear && filterMonth === currentMonth}
+            className="p-1 rounded hover:bg-muted disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
         <div className="flex-1" />
         <ViewToggle view={viewMode} onChange={handleViewChange} />
       </div>
@@ -528,6 +572,7 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
             basePath="/admin/contenido"
             showClient
             selectedIds={selectedIds}
+            onErrorClick={handleErrorClick}
             onToggleSelect={toggleSelect}
           />
           {/* Pagination */}
@@ -615,14 +660,18 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
 
                     {/* Thumbnail */}
                     <Link href={`/admin/contenido/${post.id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="relative w-16 h-20 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <div className="relative w-16 h-20 rounded-lg bg-zinc-900 overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {thumbnail ? (
-                          <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                          isVideo ? (
+                            <VideoThumbnail src={thumbnail} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                          )
                         ) : (
                           <FileImage className="h-6 w-6 text-muted-foreground/40" />
                         )}
-                        {isVideo && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        {isVideo && thumbnail && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                             <div className="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center">
                               <Play className="h-3 w-3 text-zinc-700 ml-0.5" />
                             </div>
@@ -757,6 +806,25 @@ function ContenidoWithClient({ clientId }: { clientId: string }) {
             </Button>
           </DialogFooter>
         </DialogContent>
+
+      {/* Error Notification Sheet */}
+      {selectedErrorPost?.publishError && (
+        <Sheet open={errorSheetOpen} onOpenChange={setErrorSheetOpen}>
+          <SheetContent className="w-full sm:w-96 overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Detalles del error</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6">
+              <ErrorNotificationCard
+                error={selectedErrorPost.publishError}
+                postTitle={selectedErrorPost.title || selectedErrorPost.copy?.slice(0, 60)}
+                onRetry={handleRetryPublish}
+                onDismiss={() => setErrorSheetOpen(false)}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
       </Dialog>
       </main>
     </div>

@@ -28,6 +28,8 @@ import {
   Layers,
   Upload,
   TrendingUp,
+  Users,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -35,6 +37,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   POST_STATUS_LABELS,
   POST_STATUS_COLORS,
@@ -188,6 +196,7 @@ export default function PostDetailPage() {
   const [mirrorDialogOpen, setMirrorDialogOpen] = useState(false);
   const [mirrorNetworks, setMirrorNetworks] = useState<string[]>([]);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [asignadosOpen, setAsignadosOpen] = useState(false);
   const [versionUpload, setVersionUpload] = useState<{
     mediaId: string;
     fileName: string;
@@ -365,6 +374,14 @@ export default function PostDetailPage() {
               Publicar ahora
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAsignadosOpen(true)}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Asignados
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -779,9 +796,9 @@ export default function PostDetailPage() {
           )}
         </div>
 
-        {/* Right: Mockup Preview (always shown) */}
+        {/* Right: Mockup Preview */}
         <div className="lg:w-[420px] xl:w-[460px] flex-shrink-0">
-          <div className="sticky top-6">
+          <div className="sticky top-6 space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">Vista previa</h3>
             <div className="flex justify-center p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border">
               <MockupRenderer
@@ -879,6 +896,16 @@ export default function PostDetailPage() {
           onSuccess={() => refetch()}
         />
       )}
+
+      {/* Asignados Sheet */}
+      <Sheet open={asignadosOpen} onOpenChange={setAsignadosOpen}>
+        <SheetContent side="right" className="w-80">
+          <SheetHeader>
+            <SheetTitle>Asignados</SheetTitle>
+          </SheetHeader>
+          <AssignadosSheet postId={post.id} />
+        </SheetContent>
+      </Sheet>
       </div>
       </main>
     </div>
@@ -886,6 +913,98 @@ export default function PostDetailPage() {
 }
 
 /* PublishPostDialog is now imported from @/components/publish-post-dialog */
+
+/* ─── AssignadosSheet ────────────────────────────────────────────── */
+function AssignadosSheet({ postId }: { postId: string }) {
+  const { toast } = useToast();
+  const { data: assignments = [], refetch: refetchAssignments } = trpc.posts.getAssignments.useQuery({ postId });
+  const { data: editors = [] } = trpc.posts.listEditors.useQuery();
+
+  const assignEditor = trpc.posts.assignEditor.useMutation({
+    onSuccess: () => {
+      refetchAssignments();
+      toast({ title: "Editor asignado" });
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const removeEditor = trpc.posts.removeEditor.useMutation({
+    onSuccess: () => {
+      refetchAssignments();
+      toast({ title: "Editor removido" });
+    },
+    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const assignedUserIds = new Set(assignments.map((a) => a.userId));
+  const availableEditors = editors.filter((e) => !assignedUserIds.has(e.id));
+
+  return (
+    <div className="space-y-4 mt-6">
+      {assignments.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">Sin asignaciones</p>
+      ) : (
+        <div className="space-y-3">
+          {assignments.map((a) => (
+            <div key={a.id} className="flex items-center justify-between p-2 border rounded-lg hover:bg-muted/50 transition-colors">
+              <div className="flex items-center gap-2 min-w-0">
+                {a.userAvatar ? (
+                  <img
+                    src={a.userAvatar}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+                    {a.userName?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{a.userName}</p>
+                  <p className="text-xs text-muted-foreground">{a.role}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeEditor.mutate({ postId, userId: a.userId })}
+                disabled={removeEditor.isLoading}
+                className="text-muted-foreground hover:text-destructive transition-colors ml-2 flex-shrink-0"
+                aria-label="Remover asignado"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Assign new editor */}
+      {availableEditors.length > 0 && (
+        <div className="space-y-2 pt-2 border-t">
+          <label className="text-sm font-medium">Asignar editor</label>
+          <select
+            className="text-sm w-full border rounded-lg p-2 bg-background"
+            defaultValue=""
+            onChange={(e) => {
+              const userId = e.target.value;
+              if (!userId) return;
+              assignEditor.mutate({ postId, userId, role: "editor" as const });
+              e.target.value = "";
+            }}
+            disabled={assignEditor.isLoading}
+          >
+            <option value="">Selecciona un editor...</option>
+            {availableEditors.map((ed) => (
+              <option key={ed.id} value={ed.id}>
+                {ed.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ─── MirrorGroupSection ─────────────────────────────────────────── */
 function MirrorGroupSection({

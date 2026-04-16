@@ -1,5 +1,4 @@
 {
-  "installCommand": "pnpm install",
   "crons": [
     {
       "path": "/api/cron/refresh-tokens",
@@ -16,6 +15,10 @@
     {
       "path": "/api/cron/post-insights",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sla-alerts",
+      "schedule": "0 9 * * *"
     }
   ]
 }

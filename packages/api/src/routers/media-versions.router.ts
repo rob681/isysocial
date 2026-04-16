@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router, getAgencyId } from "../trpc";
 
-const MAX_VERSIONS = 3;
+const MAX_VERSIONS = 10; // Keep up to 10 versions; V1 (original) is always preserved
 
 export const mediaVersionsRouter = router({
   // ─── Get all versions for a media item ──────────────────────────────────────
@@ -151,17 +151,22 @@ export const mediaVersionsRouter = router({
         nextVersionNumber = existingVersions.length + 1;
       }
 
-      // If we're at the limit, delete the oldest non-original version
+      // If we're at the limit, delete the second-oldest version (NEVER V1 — the original)
       if (nextVersionNumber > MAX_VERSIONS) {
-        // Find the oldest version (v1 is the original, keep it if possible)
-        const toDelete = existingVersions[0];
+        // existingVersions is sorted ASC: [V1_original, V2, V3, ...]
+        // Always preserve V1 (index 0). Delete V2 (index 1) if possible, else V1.
+        const deleteIndex = existingVersions.length >= 2 ? 1 : 0;
+        const toDelete = existingVersions[deleteIndex];
         if (toDelete) {
           await ctx.db.postMediaVersion.delete({
             where: { id: toDelete.id },
           });
 
-          // Renumber remaining versions
-          const remaining = existingVersions.slice(1);
+          // Renumber remaining versions keeping V1 at position 1
+          const remaining = [
+            ...existingVersions.slice(0, deleteIndex),
+            ...existingVersions.slice(deleteIndex + 1),
+          ];
           for (let i = 0; i < remaining.length; i++) {
             await ctx.db.postMediaVersion.update({
               where: { id: remaining[i].id },

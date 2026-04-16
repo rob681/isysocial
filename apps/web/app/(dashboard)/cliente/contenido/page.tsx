@@ -23,7 +23,12 @@ import {
   AlertCircle,
   Clock,
   Play,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 import {
   NETWORK_LABELS,
   NETWORK_COLORS,
@@ -41,6 +46,31 @@ export default function ClienteContenidoPage() {
   const [filterNetwork, setFilterNetwork] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const [filterMonth, setFilterMonth] = useState<number>(currentMonth);
+  const [filterYear, setFilterYear] = useState<number>(currentYear);
+
+  function goToPrevMonth() {
+    if (filterMonth === 1) {
+      setFilterMonth(12);
+      setFilterYear((y) => y - 1);
+    } else {
+      setFilterMonth((m) => m - 1);
+    }
+    setPage(1);
+  }
+
+  function goToNextMonth() {
+    if (filterYear === currentYear && filterMonth === currentMonth) return;
+    if (filterMonth === 12) {
+      setFilterMonth(1);
+      setFilterYear((y) => y + 1);
+    } else {
+      setFilterMonth((m) => m + 1);
+    }
+    setPage(1);
+  }
 
   // Persist view preference
   useEffect(() => {
@@ -57,6 +87,8 @@ export default function ClienteContenidoPage() {
     network: filterNetwork !== "ALL" ? (filterNetwork as SocialNetwork) : undefined,
     page,
     limit: 20,
+    month: filterMonth,
+    year: filterYear,
   });
 
   // Count posts needing attention
@@ -148,6 +180,24 @@ export default function ClienteContenidoPage() {
           </SelectContent>
         </Select>
 
+        {/* Month navigator */}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={goToPrevMonth} className="p-1 rounded hover:bg-muted">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium min-w-[120px] text-center capitalize">
+            {format(new Date(filterYear, filterMonth - 1), "MMMM yyyy", { locale: es })}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            disabled={filterYear === currentYear && filterMonth === currentMonth}
+            className="p-1 rounded hover:bg-muted disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
         <div className="flex-1" />
         <ViewToggle view={viewMode} onChange={handleViewChange} hideKanban />
       </div>
@@ -204,14 +254,18 @@ export default function ClienteContenidoPage() {
                     <Card className={`hover:shadow-md transition-all cursor-pointer border-l-4 ${borderClass} ${needsAction ? "ring-2 ring-yellow-400/50" : ""}`}>
                       <CardContent className="p-3">
                         <div className="flex items-center gap-3">
-                          <div className="relative w-16 h-20 rounded-lg bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          <div className="relative w-16 h-20 rounded-lg bg-zinc-900 overflow-hidden flex-shrink-0 flex items-center justify-center">
                             {thumbnail ? (
-                              <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                              isVideo ? (
+                                <VideoThumbnail src={thumbnail} className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                              )
                             ) : (
                               <FileImage className="h-6 w-6 text-muted-foreground/40" />
                             )}
-                            {isVideo && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            {isVideo && thumbnail && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                                 <div className="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center">
                                   <Play className="h-3 w-3 text-zinc-700 ml-0.5" />
                                 </div>

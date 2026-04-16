@@ -72,7 +72,7 @@ Return ONLY valid JSON (no markdown, no code blocks) with this structure:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 2000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -133,7 +133,7 @@ Return ONLY valid JSON (no markdown):
 }`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -230,7 +230,7 @@ Include at least these field categories:
 - strategy: mission, target_audience, brand_values, do_and_donts`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -307,7 +307,7 @@ For multi-color suggestedValue use: [{"label": "Primario", "value": "#hex", "usa
 For multi-typography suggestedValue use: {"heading": {"family": "Font", "weights": [600], "size": "24px"}, "body": {"family": "Font", "weights": [400], "size": "16px"}}`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
   });

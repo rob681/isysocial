@@ -269,4 +269,29 @@ export const editorsRouter = router({
 
       return { success: true };
     }),
+
+  // ─── My Assigned Clients (for the editor themselves) ─────────────────────
+  myAssignedClients: protectedProcedure.query(async ({ ctx }) => {
+    const user = ctx.session.user;
+    if (user.role !== "EDITOR") return { clients: [], hasManageAll: true };
+
+    const perms = (user.permissions ?? []) as string[];
+    if (perms.includes("MANAGE_ALL_CLIENTS")) {
+      return { clients: null, hasManageAll: true }; // null = all clients
+    }
+
+    const assignments = await ctx.db.editorClientAssignment.findMany({
+      where: { editor: { userId: user.id } },
+      select: {
+        client: {
+          select: { id: true, companyName: true },
+        },
+      },
+    });
+
+    return {
+      clients: assignments.map((a) => a.client),
+      hasManageAll: false,
+    };
+  }),
 });

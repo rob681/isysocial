@@ -7,6 +7,23 @@
 import type { PublishContext, PublishResult } from "./index";
 import { buildCaption } from "./index";
 
+/** Checks if a Meta API error response indicates a revoked / expired token */
+function isTokenExpiredError(data: any): boolean {
+  return (
+    data?.error?.code === 190 ||
+    data?.error?.message?.includes("session has been invalidated") ||
+    data?.error?.message?.includes("Error validating access token")
+  );
+}
+
+function tokenExpiredResult(context: string): PublishResult {
+  return {
+    success: false,
+    error: `TOKEN_EXPIRED: ${context}`,
+    requiresReconnect: true,
+  };
+}
+
 const GRAPH = "https://graph.facebook.com/v20.0";
 
 export async function publishToInstagram(ctx: PublishContext): Promise<PublishResult> {
@@ -30,7 +47,8 @@ export async function publishToInstagram(ctx: PublishContext): Promise<PublishRe
 
     if (ctx.postType === "STORY" && ctx.mediaUrls.length > 0) {
       // Stories don't support captions — pass empty
-      return await publishSingleImage(igUserId, "", ctx.mediaUrls[0]!, ctx.accessToken, "STORIES");
+      // Must detect if media is video to use correct field (image_url vs video_url)
+      return await publishStory(igUserId, ctx.mediaUrls[0]!, ctx.accessToken);
     }
 
     if (ctx.mediaUrls.length > 0) {
@@ -70,6 +88,7 @@ async function publishSingleImage(
   const containerData = await containerRes.json();
   console.log(`[IG Publisher] Single image container response: status=${containerRes.status}`, JSON.stringify(containerData).slice(0, 500));
   if (!containerRes.ok || containerData.error) {
+    if (isTokenExpiredError(containerData)) return tokenExpiredResult("publishSingleImage:container");
     return {
       success: false,
       error: `Instagram: ${containerData.error?.message ?? "Error creando contenedor"} (code: ${containerData.error?.code ?? containerRes.status})`,
@@ -107,6 +126,7 @@ async function publishCarousel(
     const data = await res.json();
     console.log(`[IG Publisher] Carousel item response: status=${res.status}`, JSON.stringify(data).slice(0, 300));
     if (!res.ok || data.error) {
+      if (isTokenExpiredError(data)) return tokenExpiredResult("publishCarousel:item");
       return {
         success: false,
         error: `Instagram carrusel: ${data.error?.message ?? "Error creando item"} (code: ${data.error?.code ?? res.status})`,
@@ -133,6 +153,7 @@ async function publishCarousel(
   const carouselData = await carouselRes.json();
   console.log(`[IG Publisher] Carousel container response: status=${carouselRes.status}`, JSON.stringify(carouselData).slice(0, 300));
   if (!carouselRes.ok || carouselData.error) {
+    if (isTokenExpiredError(carouselData)) return tokenExpiredResult("publishCarousel:container");
     return {
       success: false,
       error: `Instagram carrusel: ${carouselData.error?.message ?? "Error creando carrusel"} (code: ${carouselData.error?.code ?? carouselRes.status})`,
@@ -168,6 +189,7 @@ async function publishReel(
   const containerData = await containerRes.json();
   console.log(`[IG Publisher] Reel container response: status=${containerRes.status}`, JSON.stringify(containerData).slice(0, 300));
   if (!containerRes.ok || containerData.error) {
+    if (isTokenExpiredError(containerData)) return tokenExpiredResult("publishReel:container");
     return {
       success: false,
       error: `Instagram reel: ${containerData.error?.message ?? "Error creando contenedor"} (code: ${containerData.error?.code ?? containerRes.status})`,
@@ -180,6 +202,62 @@ async function publishReel(
   await waitForContainerReady(creationId, token, 20, 3000);
 
   // Step 3: Publish
+  return await publishContainer(igUserId, creationId, token);
+}
+
+// ── Story (photo or video) ────────────────────────────────────────────────────
+/**
+ * Publishes a Story to Instagram.
+ * Detects whether the media is a video or image by URL extension.
+ * - Photo stories: image_url + media_type=STORIES
+ * - Video stories: video_url + media_type=STORIES (requires polling for processing)
+ *
+ * Error 9004 ("Only photo or video can be accepted as media type") occurs when:
+ * 1. The URL is not publicly accessible to Meta's crawlers
+ * 2. image_url is passed for a video file (or vice versa)
+ */
+async function publishStory(
+  igUserId: string,
+  mediaUrl: string,
+  token: string
+): Promise<PublishResult> {
+  const isVideo = /\.(mp4|mov|avi|webm|m4v)(\?|$)/i.test(mediaUrl);
+
+  const containerBody: Record<string, string> = {
+    media_type: "STORIES",
+    access_token: token,
+  };
+
+  if (isVideo) {
+    containerBody.video_url = mediaUrl;
+  } else {
+    containerBody.image_url = mediaUrl;
+  }
+
+  console.log(`[IG Publisher] Story type: ${isVideo ? "VIDEO" : "IMAGE"}, url=${mediaUrl.slice(0, 80)}...`);
+
+  const containerRes = await fetch(`${GRAPH}/${igUserId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(containerBody),
+  });
+
+  const containerData = await containerRes.json();
+  console.log(`[IG Publisher] Story container response: status=${containerRes.status}`, JSON.stringify(containerData).slice(0, 500));
+
+  if (!containerRes.ok || containerData.error) {
+    if (isTokenExpiredError(containerData)) return tokenExpiredResult("publishStory:container");
+    return {
+      success: false,
+      error: `Instagram Story: ${containerData.error?.message ?? "Error creando contenedor"} (code: ${containerData.error?.code ?? containerRes.status})`,
+    };
+  }
+
+  const creationId: string = containerData.id;
+
+  // Videos need processing time; images are near-instant
+  await waitForContainerReady(creationId, token, isVideo ? 20 : 8, isVideo ? 3000 : 2000);
+
   return await publishContainer(igUserId, creationId, token);
 }
 
@@ -198,6 +276,7 @@ async function publishContainer(
   const publishData = await publishRes.json();
   console.log(`[IG Publisher] Publish container response: status=${publishRes.status}`, JSON.stringify(publishData).slice(0, 300));
   if (!publishRes.ok || publishData.error) {
+    if (isTokenExpiredError(publishData)) return tokenExpiredResult("publishContainer");
     return {
       success: false,
       error: `Instagram publish: ${publishData.error?.message ?? "Error publicando"} (code: ${publishData.error?.code ?? publishRes.status})`,

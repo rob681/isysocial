@@ -28,6 +28,9 @@ import {
   ShieldCheck,
   Eye,
   Trash2,
+  FileImage,
+  Lightbulb,
+  Calendar,
   Send,
   CalendarDays,
   Pencil,
@@ -322,6 +325,37 @@ export default function ClientDetailPage() {
         >
           <LayoutGrid className="h-4 w-4 mr-2" />
           Brand Kit
+        </Button>
+      </div>
+
+      {/* Quick access to client content */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="default"
+          size="sm"
+          className="gap-2 gradient-primary text-white"
+          onClick={() => router.push(`/admin/contenido?clientId=${clientId}`)}
+        >
+          <FileImage className="h-4 w-4" />
+          Contenido
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => router.push(`/admin/ideas?clientId=${clientId}`)}
+        >
+          <Lightbulb className="h-4 w-4" />
+          Ideas
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => router.push(`/admin/calendario?clientId=${clientId}`)}
+        >
+          <Calendar className="h-4 w-4" />
+          Calendario
         </Button>
       </div>
 

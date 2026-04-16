@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Globe, ThumbsUp, MessageCircle, Repeat2, Send, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MockupProps } from "./types";
+import { TruncatedText } from "./truncated-text";
 
 export function LinkedInPostMockup({
   clientName,
@@ -56,14 +57,15 @@ export function LinkedInPostMockup({
 
       {/* Copy */}
       <div className="px-4 pb-3">
-        <p className={cn(
-          "text-sm whitespace-pre-wrap leading-relaxed",
-          !copy && "text-zinc-400 italic"
-        )}>
-          {fullText.length > 200 ? fullText.slice(0, 200) + "..." : fullText}
-        </p>
-        {fullText.length > 200 && (
-          <button className="text-blue-600 text-sm font-medium mt-1">...ver más</button>
+        {copy ? (
+          <TruncatedText
+            text={fullText}
+            maxChars={200}
+            className="text-sm whitespace-pre-wrap leading-relaxed text-zinc-900 dark:text-zinc-100"
+            accentColor="text-blue-700 dark:text-blue-400"
+          />
+        ) : (
+          <p className="text-sm text-zinc-400 italic">{fullText}</p>
         )}
       </div>
 

@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
-import { uploadFile } from "@isysocial/api/src/lib/supabase-storage";
+import { uploadFile, getSignedUrl } from "@isysocial/api/src/lib/supabase-storage";
 
 async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
   try {
@@ -13,8 +13,10 @@ async function cacheProfilePic(remoteUrl: string, clientId: string, network: str
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
     const path = `client-logos/${clientId}/${network}.${ext}`;
-    const { url } = await uploadFile("isysocial-media", path, buffer, contentType);
-    return url;
+    const { storagePath } = await uploadFile("isysocial-media", path, buffer, contentType);
+    // Return a long-lived signed URL (24h) for profile pictures stored in DB
+    const signedUrl = await getSignedUrl(storagePath, 86400);
+    return signedUrl;
   } catch {
     return remoteUrl;
   }

@@ -3,8 +3,10 @@
 // Exchanges code for token, fetches profile info, stores in DB.
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { db } from "@isysocial/db";
-import { uploadFile } from "@isysocial/api/src/lib/supabase-storage";
+import { uploadFile, getSignedUrl } from "@isysocial/api/src/lib/supabase-storage";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
 
@@ -20,8 +22,10 @@ async function cacheProfilePic(remoteUrl: string, clientId: string, network: str
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
     const path = `client-logos/${clientId}/${network}.${ext}`;
-    const { url } = await uploadFile("isysocial-media", path, buffer, contentType);
-    return url;
+    const { storagePath } = await uploadFile("isysocial-media", path, buffer, contentType);
+    // Return a long-lived signed URL (24h) for profile pictures stored in DB
+    const signedUrl = await getSignedUrl(storagePath, 86400);
+    return signedUrl;
   } catch (err) {
     console.warn("[cacheProfilePic] Failed to cache, using original URL:", err);
     return remoteUrl;
@@ -80,6 +84,16 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { network: string } }
 ) {
+  // Only ADMIN and SUPER_ADMIN roles can complete social network OAuth connections
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+  const userRole = (session.user as any).role as string | undefined;
+  if (!["ADMIN", "SUPER_ADMIN"].includes(userRole ?? "")) {
+    return NextResponse.redirect(new URL("/dashboard?error=unauthorized", req.url));
+  }
+
   const networkKey = params.network.toLowerCase() as NetworkKey;
   const redirectUri = `${REDIRECT_BASE}/api/social/callback/${networkKey}`;
 

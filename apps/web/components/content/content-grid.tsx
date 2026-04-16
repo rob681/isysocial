@@ -10,6 +10,7 @@ import {
   Play,
   Check,
 } from "lucide-react";
+import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 import {
   NETWORK_LABELS,
   NETWORK_COLORS,
@@ -39,9 +40,10 @@ interface ContentGridProps {
   showClient?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  onErrorClick?: (post: ContentGridPost) => void;
 }
 
-export function ContentGrid({ posts, basePath, showClient = false, selectedIds, onToggleSelect }: ContentGridProps) {
+export function ContentGrid({ posts, basePath, showClient = false, selectedIds, onToggleSelect, onErrorClick }: ContentGridProps) {
   const selectionEnabled = !!selectedIds && !!onToggleSelect;
 
   // Group mirror posts: collapse posts with same mirrorGroupId into one card
@@ -63,7 +65,14 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
       {grouped.map(({ primary: post, mirrors }) => {
         const statusColor = POST_STATUS_COLORS[post.status as PostStatus] || "";
         const thumbnail = post.media?.[0]?.fileUrl;
-        const isVideo = post.media?.[0]?.mimeType?.startsWith("video/");
+        const mimeType = post.media?.[0]?.mimeType;
+        // Detect video by mimeType OR by file extension as fallback (defense in depth)
+        const isVideoByMime = mimeType?.startsWith("video/");
+        const isVideoByExt = thumbnail
+          ? /\.(mp4|webm|mov|avi|mkv)(\?|$|#)/i.test(thumbnail)
+          : false;
+        const isVideo = isVideoByMime || isVideoByExt;
+
         const needsAction = post.status === "IN_REVIEW";
         const isSelected = selectionEnabled && selectedIds.has(post.id);
         const isMirror = mirrors.length > 1;
@@ -71,16 +80,23 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
         const card = (
           <Card className={`group hover:shadow-lg transition-all duration-200 cursor-pointer overflow-hidden h-full ${needsAction ? "ring-2 ring-yellow-400/50" : ""} ${isSelected ? "ring-2 ring-primary shadow-md" : ""}`}>
             {/* Thumbnail */}
-            <div className="relative aspect-[4/3] bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+            <div className="relative aspect-[4/3] bg-zinc-900 overflow-hidden">
               {thumbnail ? (
                 <>
-                  <img
-                    src={thumbnail}
-                    alt=""
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                  {isVideo ? (
+                    <VideoThumbnail
+                      src={thumbnail}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <img
+                      src={thumbnail}
+                      alt=""
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  )}
                   {isVideo && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                       <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center">
                         <Play className="h-5 w-5 text-zinc-700 ml-0.5" />
                       </div>
@@ -95,12 +111,32 @@ export function ContentGrid({ posts, basePath, showClient = false, selectedIds, 
 
               {/* Status badge overlay */}
               <div className={`absolute ${selectionEnabled ? "top-2 left-10" : "top-2 left-2"}`}>
-                <Badge
-                  variant="secondary"
-                  className={`${statusColor} text-[10px] shadow-sm backdrop-blur-sm`}
-                >
-                  {POST_STATUS_LABELS[post.status as PostStatus]}
-                </Badge>
+                {(post as any).publishError ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onErrorClick?.(post);
+                    }}
+                    className="inline-block"
+                    title="Ver detalles del error"
+                  >
+                    <Badge
+                      variant="secondary"
+                      className="bg-red-500/80 hover:bg-red-600/80 text-white text-[10px] shadow-sm backdrop-blur-sm cursor-pointer transition-colors"
+                    >
+                      ⚠️ Falló
+                    </Badge>
+                  </button>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    className={`${statusColor} text-[10px] shadow-sm backdrop-blur-sm`}
+                  >
+                    {POST_STATUS_LABELS[post.status as PostStatus]}
+                  </Badge>
+                )}
               </div>
 
               {/* Network badge(s) overlay — stacked for mirror posts */}
