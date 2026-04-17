@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
     "instagram_basic",
     "instagram_content_publish",
     "instagram_manage_comments",
+    "instagram_manage_insights",
+    "instagram_business_manage_insights",
   ].join(",");
 
   const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");

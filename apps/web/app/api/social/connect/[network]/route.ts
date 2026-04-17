@@ -17,17 +17,17 @@ const oauthConfig: Record<
 > = {
   facebook: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
-    // Note: instagram_business_manage_insights is NOT a valid OAuth dialog scope —
-    // the correct scope is instagram_manage_insights (Graph API permission name differs).
-    // Analytics access is granted via the page access token once pages_read_engagement is approved.
+    // instagram_business_manage_insights IS a valid OAuth scope for Facebook Login
+    // and is required for the Meta App Review. It grants access to Instagram Business
+    // Account insights via the Graph API (/{ig-user-id}/insights endpoint).
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,instagram_business_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,instagram_business_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   linkedin: {
@@ -43,7 +43,8 @@ const oauthConfig: Record<
   },
   tiktok: {
     authUrl: "https://www.tiktok.com/v2/auth/authorize/",
-    scopes: "video.publish,video.upload",
+    // user.info.basic is required to fetch open_id, display_name, avatar_url after OAuth
+    scopes: "user.info.basic,video.publish,video.upload",
     clientId: (process.env.TIKTOK_CLIENT_KEY ?? "").trim(),
   },
 };

@@ -12,6 +12,7 @@ import {
 import { publishToNetwork } from "../lib/publishers/index";
 import type { SocialNetwork } from "@isysocial/db";
 import { broadcastEvent } from "../lib/realtime-events";
+import { refreshTikTokToken, isTikTokTokenExpired } from "../lib/tiktok-token";
 
 export const publishingRouter = router({
   // ─── Get network connection status for a client ───────────────────────────
@@ -151,6 +152,8 @@ export const publishingRouter = router({
         accountName: string;
         accountId: string;
         accessToken: string;
+        refreshToken: string | null;
+        tokenExpiresAt: Date | null;
         pageId: string | null;
       }[] = [];
       if (input.agencyNetworkIds.length > 0) {
@@ -166,6 +169,8 @@ export const publishingRouter = router({
             accountName: true,
             accountId: true,
             accessToken: true,
+            refreshToken: true,
+            tokenExpiresAt: true,
             pageId: true,
           },
         });
@@ -210,6 +215,27 @@ export const publishingRouter = router({
           },
         });
 
+        // ── TikTok: auto-refresh access token if expired ──────────────────────
+        let clientAccessToken = sn.accessToken!;
+        if (sn.network === "TIKTOK" && sn.refreshToken && isTikTokTokenExpired(sn.tokenExpiresAt)) {
+          try {
+            const refreshed = await refreshTikTokToken(sn.refreshToken);
+            clientAccessToken = refreshed.accessToken;
+            await ctx.db.clientSocialNetwork.update({
+              where: { id: sn.id },
+              data: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                tokenExpiresAt: refreshed.expiresAt,
+                tokenExpired: false,
+                tokenErrorMsg: null,
+              },
+            });
+          } catch (refreshErr: any) {
+            console.error('[TikTok] Token refresh failed for client network', sn.id, (refreshErr as Error).message);
+          }
+        }
+
         const publishResult = await publishToNetwork({
           network: sn.network,
           copy: post.copy ?? "",
@@ -217,7 +243,7 @@ export const publishingRouter = router({
           mediaUrls,
           postType: post.postType,
           accountId: sn.accountId ?? "",
-          accessToken: sn.accessToken!,
+          accessToken: clientAccessToken,
           pageId: sn.pageId ?? undefined,
         });
 
@@ -282,6 +308,25 @@ export const publishingRouter = router({
           },
         });
 
+        // ── TikTok: auto-refresh access token if expired ──────────────────────
+        let agencyAccessToken = sn.accessToken;
+        if (sn.network === "TIKTOK" && sn.refreshToken && isTikTokTokenExpired(sn.tokenExpiresAt)) {
+          try {
+            const refreshed = await refreshTikTokToken(sn.refreshToken);
+            agencyAccessToken = refreshed.accessToken;
+            await ctx.db.agencySocialAccount.update({
+              where: { id: sn.id },
+              data: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                tokenExpiresAt: refreshed.expiresAt,
+              },
+            });
+          } catch (refreshErr: any) {
+            console.error('[TikTok] Token refresh failed for agency account', sn.id, (refreshErr as Error).message);
+          }
+        }
+
         const publishResult = await publishToNetwork({
           network: sn.network,
           copy: post.copy ?? "",
@@ -289,7 +334,7 @@ export const publishingRouter = router({
           mediaUrls,
           postType: post.postType,
           accountId: sn.accountId,
-          accessToken: sn.accessToken,
+          accessToken: agencyAccessToken,
           pageId: sn.pageId ?? undefined,
         });
 
@@ -555,6 +600,8 @@ export const publishingRouter = router({
         accountName: string;
         accountId: string;
         accessToken: string;
+        refreshToken: string | null;
+        tokenExpiresAt: Date | null;
         pageId: string | null;
       }[] = [];
       if (input.agencyNetworkIds.length > 0) {
@@ -570,6 +617,8 @@ export const publishingRouter = router({
             accountName: true,
             accountId: true,
             accessToken: true,
+            refreshToken: true,
+            tokenExpiresAt: true,
             pageId: true,
           },
         });

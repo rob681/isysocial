@@ -175,10 +175,15 @@ export async function GET(
       });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok || tokenData.error?.code !== "ok") {
-        throw new Error(tokenData.error?.message ?? "Error obteniendo token de TikTok");
+        throw new Error(
+          tokenData.error?.message ??
+          `Error obteniendo token de TikTok (${tokenData.error?.code ?? tokenRes.status})`
+        );
       }
       accessToken = tokenData.data.access_token;
-      refreshToken = tokenData.data.refresh_token;
+      // TikTok returns a new refresh_token each exchange; store it
+      refreshToken = tokenData.data.refresh_token ?? undefined;
+      // access_token expires in 24h; refresh_token expires in ~365 days
       if (tokenData.data.expires_in) {
         tokenExpiresAt = new Date(Date.now() + tokenData.data.expires_in * 1000);
       }
@@ -594,17 +599,24 @@ export async function GET(
       profilePic = meData.data?.profile_image_url;
     } else if (networkKey === "tiktok") {
       const meRes = await fetch(
-        "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",
+        "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url,profile_deep_link",
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
         }
       );
       const meData = await meRes.json();
+      if (meData.error?.code !== "ok" && !meData.data?.user) {
+        console.error("[tiktok callback] user/info failed:", JSON.stringify(meData.error));
+        // Non-fatal: account can still be saved with empty profile data
+      }
       accountId = meData.data?.user?.open_id ?? "";
-      accountName = meData.data?.user?.display_name ?? accountId;
-      profilePic = meData.data?.user?.avatar_url;
+      accountName = meData.data?.user?.display_name
+        ? `@${meData.data.user.display_name}`
+        : accountId;
+      profilePic = meData.data?.user?.avatar_url ?? undefined;
     }
 
     // ── Step 3: Upsert ClientSocialNetwork ────────────────────────────────────
