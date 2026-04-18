@@ -1,6 +1,7 @@
 {
   "buildCommand": "pnpm build",
   "installCommand": "pnpm install",
+  "outputDirectory": "apps/web/.next",
   "crons": [
     {
       "path": "/api/cron/publish-scheduled",
