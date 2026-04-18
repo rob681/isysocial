@@ -1,0 +1,22 @@
+{
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install",
+  "crons": [
+    {
+      "path": "/api/cron/publish-scheduled",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/post-insights",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sla-alerts",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-tokens",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
