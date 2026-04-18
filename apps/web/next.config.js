@@ -34,15 +34,15 @@ const nextConfig = {
     // Isysocial needs broader img-src and connect-src for social network APIs
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://js.stripe.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://js.stripe.com https://www.tiktok.com https://*.tiktokapis.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       // Social network CDNs for media previews
       "img-src 'self' data: blob: https://*.supabase.co https://*.cdninstagram.com https://*.fbcdn.net https://media.giphy.com https://media0.giphy.com https://media1.giphy.com https://media2.giphy.com https://media3.giphy.com https://media4.giphy.com https://lh3.googleusercontent.com",
       // Social network APIs + Giphy + Sentry
-      "connect-src 'self' https://*.supabase.co https://api.stripe.com https://api.giphy.com https://graph.facebook.com https://graph.instagram.com https://api.twitter.com https://api.x.com https://api.linkedin.com https://www.googleapis.com https://vitals.vercel-insights.com https://*.sentry.io https://*.ingest.sentry.io",
-      // Stripe payment iframe
-      "frame-src https://js.stripe.com https://hooks.stripe.com https://www.google.com",
+      "connect-src 'self' https://*.supabase.co https://api.stripe.com https://api.giphy.com https://graph.facebook.com https://graph.instagram.com https://api.twitter.com https://api.x.com https://api.linkedin.com https://www.googleapis.com https://vitals.vercel-insights.com https://*.sentry.io https://*.ingest.sentry.io https://www.tiktok.com https://open.tiktokapis.com https://*.tiktokapis.com",
+      // Stripe payment iframe + TikTok OAuth
+      "frame-src https://js.stripe.com https://hooks.stripe.com https://www.google.com https://www.tiktok.com",
       // Allow media from Supabase and blob for video editor + web workers (Sentry, video extraction)
       "media-src 'self' blob: https://*.supabase.co",
       "worker-src 'self' blob:",
