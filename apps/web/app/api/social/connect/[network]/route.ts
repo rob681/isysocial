@@ -90,7 +90,11 @@ export async function GET(
   const redirectUri = `${REDIRECT_BASE}/api/social/callback/${networkKey}`;
 
   const authUrl = new URL(config.authUrl);
-  authUrl.searchParams.set("client_id", config.clientId);
+  if (networkKey === "tiktok") {
+    authUrl.searchParams.set("client_key", config.clientId);
+  } else {
+    authUrl.searchParams.set("client_id", config.clientId);
+  }
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set(
     "scope",
