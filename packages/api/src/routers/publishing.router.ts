@@ -492,6 +492,46 @@ export const publishingRouter = router({
 
       const mediaUrls = log.post.media.map((m) => m.fileUrl);
 
+      // ── TikTok: auto-refresh access token if expired ──────────────────────
+      let retryAccessToken = sn.accessToken;
+      if (
+        sn.network === "TIKTOK" &&
+        sn.refreshToken &&
+        isTikTokTokenExpired(sn.tokenExpiresAt)
+      ) {
+        try {
+          const refreshed = await refreshTikTokToken(sn.refreshToken);
+          retryAccessToken = refreshed.accessToken;
+          if (log.agencyAccountId) {
+            await ctx.db.agencySocialAccount.update({
+              where: { id: log.agencyAccountId },
+              data: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                tokenExpiresAt: refreshed.expiresAt,
+              },
+            });
+          } else if (log.networkId) {
+            await ctx.db.clientSocialNetwork.update({
+              where: { id: log.networkId },
+              data: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                tokenExpiresAt: refreshed.expiresAt,
+                tokenExpired: false,
+                tokenErrorMsg: null,
+              },
+            });
+          }
+        } catch (refreshErr: any) {
+          console.error(
+            "[TikTok] Token refresh failed during retryPublish",
+            sn.id,
+            (refreshErr as Error).message
+          );
+        }
+      }
+
       const result = await publishToNetwork({
         network: sn.network,
         copy: log.post.copy ?? "",
@@ -499,7 +539,7 @@ export const publishingRouter = router({
         mediaUrls,
         postType: log.post.postType,
         accountId: sn.accountId ?? "",
-        accessToken: sn.accessToken,
+        accessToken: retryAccessToken,
         pageId: sn.pageId ?? undefined,
       });
 
@@ -680,6 +720,36 @@ export const publishingRouter = router({
           });
 
           const mediaUrls = post.media.map((m) => m.fileUrl);
+
+          // ── TikTok: auto-refresh access token if expired ──────────────────
+          let batchClientAccessToken = sn.accessToken!;
+          if (
+            sn.network === "TIKTOK" &&
+            sn.refreshToken &&
+            isTikTokTokenExpired(sn.tokenExpiresAt)
+          ) {
+            try {
+              const refreshed = await refreshTikTokToken(sn.refreshToken);
+              batchClientAccessToken = refreshed.accessToken;
+              await ctx.db.clientSocialNetwork.update({
+                where: { id: sn.id },
+                data: {
+                  accessToken: refreshed.accessToken,
+                  refreshToken: refreshed.refreshToken,
+                  tokenExpiresAt: refreshed.expiresAt,
+                  tokenExpired: false,
+                  tokenErrorMsg: null,
+                },
+              });
+            } catch (refreshErr: any) {
+              console.error(
+                "[TikTok] Token refresh failed during publishBatch (client)",
+                sn.id,
+                (refreshErr as Error).message
+              );
+            }
+          }
+
           const publishResult = await publishToNetwork({
             network: sn.network,
             copy: post.copy ?? "",
@@ -687,7 +757,7 @@ export const publishingRouter = router({
             mediaUrls,
             postType: post.postType,
             accountId: sn.accountId ?? "",
-            accessToken: sn.accessToken!,
+            accessToken: batchClientAccessToken,
             pageId: sn.pageId ?? undefined,
           });
 
@@ -741,6 +811,34 @@ export const publishingRouter = router({
           });
 
           const mediaUrls = post.media.map((m) => m.fileUrl);
+
+          // ── TikTok: auto-refresh access token if expired ──────────────────
+          let batchAgencyAccessToken = sn.accessToken;
+          if (
+            sn.network === "TIKTOK" &&
+            sn.refreshToken &&
+            isTikTokTokenExpired(sn.tokenExpiresAt)
+          ) {
+            try {
+              const refreshed = await refreshTikTokToken(sn.refreshToken);
+              batchAgencyAccessToken = refreshed.accessToken;
+              await ctx.db.agencySocialAccount.update({
+                where: { id: sn.id },
+                data: {
+                  accessToken: refreshed.accessToken,
+                  refreshToken: refreshed.refreshToken,
+                  tokenExpiresAt: refreshed.expiresAt,
+                },
+              });
+            } catch (refreshErr: any) {
+              console.error(
+                "[TikTok] Token refresh failed during publishBatch (agency)",
+                sn.id,
+                (refreshErr as Error).message
+              );
+            }
+          }
+
           const publishResult = await publishToNetwork({
             network: sn.network,
             copy: post.copy ?? "",
@@ -748,7 +846,7 @@ export const publishingRouter = router({
             mediaUrls,
             postType: post.postType,
             accountId: sn.accountId,
-            accessToken: sn.accessToken,
+            accessToken: batchAgencyAccessToken,
             pageId: sn.pageId ?? undefined,
           });
 

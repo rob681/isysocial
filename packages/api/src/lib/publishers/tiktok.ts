@@ -66,15 +66,35 @@ async function initVideoPublish(
 
   const data = await res.json();
 
-  if (!res.ok || data?.error?.code !== "ok") {
+  // TikTok Content Posting API v2 response shapes:
+  //   Success: { data: { publish_id }, error: { code: "ok", message: "", log_id } }
+  //   Error:   { error: { code: "...", message: "...", log_id } }
+  // The old check `data?.error?.code !== "ok"` is correct for this endpoint,
+  // but we harden it: also reject when HTTP failed or publish_id missing,
+  // and detect token-expiration error codes so the caller reconnects the account.
+  const errorCode: string | undefined = data?.error?.code;
+  const hasRealError = errorCode && errorCode !== "ok";
+  const publishId: string | undefined = data?.data?.publish_id;
+
+  if (!res.ok || hasRealError || !publishId) {
     const errMsg =
       data?.error?.message ??
-      data?.error?.code ??
+      errorCode ??
       "Error iniciando publicación en TikTok";
-    return { success: false, error: errMsg };
-  }
 
-  const publishId: string = data?.data?.publish_id ?? "";
+    // Token-related failures → tell caller to reconnect the account
+    const requiresReconnect =
+      res.status === 401 ||
+      errorCode === "access_token_invalid" ||
+      errorCode === "scope_not_authorized" ||
+      errorCode === "unauthorized";
+
+    return {
+      success: false,
+      error: errMsg,
+      ...(requiresReconnect ? { requiresReconnect: true } : {}),
+    };
+  }
 
   // Note: TikTok processes asynchronously. We save the publish_id as platformPostId.
   // The video will be available on TikTok once processing completes (typically <5 min).
