@@ -17,17 +17,16 @@ const oauthConfig: Record<
 > = {
   facebook: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
-    // instagram_business_manage_insights IS a valid OAuth scope for Facebook Login
-    // and is required for the Meta App Review. It grants access to Instagram Business
+    // Using instagram_manage_insights to access Instagram Business
     // Account insights via the Graph API (/{ig-user-id}/insights endpoint).
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,instagram_business_manage_insights,pages_read_user_content,business_management",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   instagram: {
     authUrl: "https://www.facebook.com/v20.0/dialog/oauth",
     scopes:
-      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,instagram_business_manage_insights,pages_read_user_content,business_management",
+      "pages_manage_posts,pages_read_engagement,instagram_content_publish,instagram_basic,pages_show_list,pages_manage_metadata,instagram_manage_insights,pages_read_user_content,business_management",
     clientId: (process.env.META_APP_ID ?? "").trim(),
   },
   linkedin: {
