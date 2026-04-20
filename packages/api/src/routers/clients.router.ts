@@ -1066,8 +1066,11 @@ export const clientsRouter = router({
           }
 
           // Validate the (possibly refreshed) token by hitting /v2/user/info/
+          // Only fields available with user.info.basic — requesting others
+          // (profile_deep_link, username, bio_description, is_verified) makes
+          // TikTok reject the call with a field_permission_denied error.
           const meRes = await fetch(
-            "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url,profile_deep_link",
+            "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name",
             {
               headers: {
                 Authorization: `Bearer ${token}`,

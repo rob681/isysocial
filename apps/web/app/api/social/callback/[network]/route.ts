@@ -665,7 +665,11 @@ export async function GET(
       profilePic = meData.data?.profile_image_url;
     } else if (networkKey === "tiktok") {
       const meRes = await fetch(
-        "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url,profile_deep_link",
+        // Fields available with the user.info.basic scope ONLY.
+        // profile_deep_link, bio_description, username, is_verified require
+        // user.info.profile — requesting any of those with only user.info.basic
+        // makes TikTok reject the whole call with "field_permission_denied".
+        "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name",
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
