@@ -109,12 +109,8 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
           : "El borrador se guardó correctamente.",
       });
 
-      // Construct redirect path with clientId from form
-      const clientId = form.getValues('clientId');
-      const redirectPath = clientId
-        ? `/admin/clientes/${clientId}/contenido/${data.id}`
-        : `${successRedirectBase}/${data.id}`;
-      router.push(redirectPath);
+      // Redirect to content detail page (the actual route that exists)
+      router.push(`/admin/contenido/${data.id}`);
     },
     onError: (err) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
