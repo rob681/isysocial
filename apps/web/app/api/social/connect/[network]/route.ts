@@ -44,9 +44,11 @@ const oauthConfig: Record<
     authUrl: "https://www.tiktok.com/v2/auth/authorize/",
     // user.info.basic is required to fetch open_id, display_name, avatar_url after OAuth
     // TikTok scopes must be space-separated, not comma-separated
-    // NOTE: video.publish removed temporarily until Direct Post API is approved by TikTok
-    // TODO: Re-add video.publish scope once TikTok approves Direct Post API access
-    scopes: "user.info.basic video.upload",
+    // NOTE: Both video.publish AND video.upload require TikTok approval.
+    // Temporarily using only user.info.basic to enable account connection flow.
+    // TODO: Re-add video.upload and video.publish scopes once TikTok approves
+    //   Content Posting API access (application currently in review).
+    scopes: "user.info.basic",
     clientId: (process.env.TIKTOK_CLIENT_KEY ?? "").trim(),
   },
 };
