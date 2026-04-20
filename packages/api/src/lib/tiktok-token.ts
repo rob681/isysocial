@@ -37,16 +37,28 @@ export async function refreshTikTokToken(
 
   const data = await res.json();
 
-  if (!res.ok || data?.error?.code !== "ok") {
-    const msg = data?.error?.message ?? data?.error?.code ?? "Error refreshing TikTok token";
-    throw new Error(msg);
+  // TikTok OAuth v2 returns the token payload at the ROOT level on success:
+  //   { access_token, refresh_token, expires_in, refresh_expires_in, scope, ... }
+  // On error it returns: { error, error_description, log_id } — no nested `data` key.
+  // Our old parsing read `data.data.access_token` and checked `data.error.code === "ok"`
+  // which is wrong on both counts: neither field exists in the real response shape.
+  const payload: any = data?.data ?? data;
+
+  if (!res.ok || !payload?.access_token) {
+    const msg = data?.error?.error_description ??
+                data?.error_description ??
+                data?.error?.message ??
+                data?.error ??
+                data?.message ??
+                "Error refreshing TikTok token";
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
 
-  const expiresIn: number = data.data?.expires_in ?? 86400; // default 24h
+  const expiresIn: number = payload.expires_in ?? 86400; // default 24h
 
   return {
-    accessToken: data.data.access_token,
-    refreshToken: data.data.refresh_token ?? refreshToken, // TikTok may return a new refresh_token
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? refreshToken, // TikTok may return a new refresh_token
     expiresAt: new Date(Date.now() + expiresIn * 1000),
   };
 }

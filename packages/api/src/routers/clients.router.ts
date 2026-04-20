@@ -4,6 +4,7 @@ import { router, protectedProcedure, adminProcedure, getAgencyId } from "../trpc
 import { createClientSchema, updateClientSchema, updateBrandKitSchema } from "@isysocial/shared";
 import { createToken } from "../lib/tokens";
 import { sendEmailNotification } from "../lib/email";
+import { refreshTikTokToken, isTikTokTokenExpired } from "../lib/tiktok-token";
 
 export const clientsRouter = router({
   list: protectedProcedure
@@ -1014,10 +1015,13 @@ export const clientsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Página no encontrada o sin token" });
       }
 
-      const token = record.accessToken;
+      let token = record.accessToken;
       let tokenValid = false;
       let accountName = record.accountName;
       let profilePic = record.profilePic;
+      let refreshedAccessToken: string | undefined;
+      let refreshedRefreshToken: string | undefined;
+      let refreshedExpiresAt: Date | undefined;
 
       try {
         if (input.network === "FACEBOOK") {
@@ -1046,8 +1050,54 @@ export const clientsRouter = router({
             { headers: { Authorization: `Bearer ${token}` } }
           );
           tokenValid = res.ok;
+        } else if (input.network === "TIKTOK") {
+          // ── TikTok: proactively refresh the access token if near expiry ────────
+          if (record.refreshToken && isTikTokTokenExpired(record.tokenExpiresAt)) {
+            try {
+              const refreshed = await refreshTikTokToken(record.refreshToken);
+              token = refreshed.accessToken;
+              refreshedAccessToken = refreshed.accessToken;
+              refreshedRefreshToken = refreshed.refreshToken;
+              refreshedExpiresAt = refreshed.expiresAt;
+            } catch (err) {
+              console.error("[refreshClientPageInfo] TikTok refresh failed:", err);
+              // Keep going with the existing token — /v2/user/info/ will tell us if it works.
+            }
+          }
+
+          // Validate the (possibly refreshed) token by hitting /v2/user/info/
+          const meRes = await fetch(
+            "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url,profile_deep_link",
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          const meData = await meRes.json();
+
+          // TikTok user/info response IS wrapped in {data: {user: {...}}} (unlike the token endpoint).
+          if (meRes.ok && meData?.data?.user?.open_id) {
+            tokenValid = true;
+            const user = meData.data.user;
+            accountName = user.display_name ? `@${user.display_name}` : (accountName ?? user.open_id);
+            profilePic = user.avatar_url ?? profilePic;
+          } else {
+            console.error("[refreshClientPageInfo] TikTok user/info failed:", {
+              status: meRes.status,
+              body: meData,
+            });
+            // If user/info failed but we just refreshed successfully, treat the token as valid.
+            // This handles the case where the /v2/user/info/ endpoint is flaky or requires
+            // additional scope approval, but the token itself is fine.
+            if (refreshedAccessToken) {
+              tokenValid = true;
+            }
+          }
         }
-      } catch {
+      } catch (err) {
+        console.error(`[refreshClientPageInfo] ${input.network} validation error:`, err);
         tokenValid = false;
       }
 
@@ -1057,6 +1107,9 @@ export const clientsRouter = router({
           accountName: accountName ?? undefined,
           profilePic: profilePic ?? undefined,
           isActive: tokenValid,
+          ...(refreshedAccessToken ? { accessToken: refreshedAccessToken } : {}),
+          ...(refreshedRefreshToken ? { refreshToken: refreshedRefreshToken } : {}),
+          ...(refreshedExpiresAt ? { tokenExpiresAt: refreshedExpiresAt } : {}),
         },
       });
 

@@ -132,6 +132,10 @@ export async function GET(
     let accessToken = "";
     let refreshToken: string | undefined;
     let tokenExpiresAt: Date | undefined;
+    // Scopes granted by the provider (returned in the token exchange response).
+    // We persist this so we can show it in the UI and tell at a glance whether
+    // a given TikTok account has video.publish / video.upload authorized.
+    let tokenScope: string | undefined;
     // TikTok's token exchange response already includes open_id, so we stash it
     // here and use it as a fallback in Step 2 if the /v2/user/info/ call fails.
     let tiktokOpenIdHint: string | undefined;
@@ -239,6 +243,15 @@ export async function GET(
       // so we stash it as a fallback for the Step 2 /v2/user/info/ call.
       if (tikTokPayload.open_id && typeof tikTokPayload.open_id === "string") {
         tiktokOpenIdHint = tikTokPayload.open_id;
+      }
+
+      // TikTok returns the granted scopes in the token response as a comma-
+      // separated string (e.g. "user.info.basic,video.publish,video.upload").
+      // Persist this so we can tell whether video.publish/video.upload were
+      // actually approved without re-running the OAuth flow.
+      if (tikTokPayload.scope && typeof tikTokPayload.scope === "string") {
+        tokenScope = tikTokPayload.scope;
+        console.log("[TikTok callback] Granted scopes:", tokenScope);
       }
     } else if (networkKey === "linkedin") {
       // LinkedIn uses POST with form body
@@ -727,7 +740,10 @@ export async function GET(
         profilePic: profilePic ?? null,
         isActive: true,
         assignedAt: new Date(),
-        tokenScope: null,
+        tokenScope: tokenScope ?? null,
+        // Clear any prior "token expired" flag since we just got a fresh token.
+        tokenExpired: false,
+        tokenErrorMsg: null,
       },
       create: {
         clientId,
@@ -740,6 +756,7 @@ export async function GET(
         accountName,
         profilePic: profilePic ?? null,
         isActive: true,
+        tokenScope: tokenScope ?? null,
       },
     });
 
