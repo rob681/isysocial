@@ -132,6 +132,9 @@ export async function GET(
     let accessToken = "";
     let refreshToken: string | undefined;
     let tokenExpiresAt: Date | undefined;
+    // TikTok's token exchange response already includes open_id, so we stash it
+    // here and use it as a fallback in Step 2 if the /v2/user/info/ call fails.
+    let tiktokOpenIdHint: string | undefined;
 
     if (networkKey === "x") {
       // X uses Basic Auth
@@ -174,6 +177,12 @@ export async function GET(
         }),
       });
       const tokenData = await tokenRes.json();
+
+      // TikTok OAuth v2 returns the token payload at the ROOT level
+      // (i.e. {access_token, open_id, ...}), NOT wrapped in a `data` object.
+      // We still fall back to tokenData.data for backwards-compat / defensive parsing.
+      const tikTokPayload: any = tokenData.data ?? tokenData;
+
       console.log("[TikTok Token Exchange - Full Response]", {
         status: tokenRes.status,
         statusText: tokenRes.statusText,
@@ -182,30 +191,34 @@ export async function GET(
         clientId: tokenConfig.clientId,
         clientSecret: tokenConfig.clientSecret ? "***" : undefined,
         responseData: tokenData,
-        dataPath: {
-          hasData: !!tokenData.data,
-          dataKeys: tokenData.data ? Object.keys(tokenData.data) : [],
-          accessToken: tokenData.data?.access_token ? "***" : undefined,
-          hasAccessToken: !!tokenData.data?.access_token,
+        payloadPath: {
+          usedNestedData: !!tokenData.data,
+          payloadKeys: Object.keys(tikTokPayload || {}),
+          hasAccessToken: !!tikTokPayload?.access_token,
+          hasOpenId: !!tikTokPayload?.open_id,
+          scope: tikTokPayload?.scope,
         },
       });
 
-      // TikTok API returns {data: {access_token, ...}} on success
       if (!tokenRes.ok) {
         const errorMsg = tokenData.error?.error_description ||
+                        tokenData.error_description ||
                         tokenData.error?.message ||
+                        tokenData.message ||
                         `HTTP ${tokenRes.status}: ${tokenRes.statusText}`;
         throw new Error(`TikTok OAuth Error: ${errorMsg}`);
       }
 
-      if (!tokenData.data?.access_token) {
+      if (!tikTokPayload?.access_token) {
         const errorMsg = tokenData.error?.error_description ||
+                        tokenData.error_description ||
                         tokenData.error?.message ||
+                        tokenData.message ||
                         JSON.stringify(tokenData);
         throw new Error(`TikTok OAuth Error: No access_token returned. ${errorMsg}`);
       }
 
-      accessToken = tokenData.data.access_token;
+      accessToken = tikTokPayload.access_token;
       if (!accessToken || typeof accessToken !== "string" || accessToken.trim() === "") {
         console.error("[TikTok callback] Invalid access_token in response:", {
           type: typeof accessToken,
@@ -216,10 +229,16 @@ export async function GET(
       }
 
       // TikTok returns a new refresh_token each exchange; store it
-      refreshToken = tokenData.data?.refresh_token ?? undefined;
+      refreshToken = tikTokPayload.refresh_token ?? undefined;
       // access_token expires in 24h; refresh_token expires in ~365 days
-      if (tokenData.data?.expires_in) {
-        tokenExpiresAt = new Date(Date.now() + tokenData.data.expires_in * 1000);
+      if (tikTokPayload.expires_in) {
+        tokenExpiresAt = new Date(Date.now() + tikTokPayload.expires_in * 1000);
+      }
+
+      // TikTok also returns open_id directly in the token exchange response,
+      // so we stash it as a fallback for the Step 2 /v2/user/info/ call.
+      if (tikTokPayload.open_id && typeof tikTokPayload.open_id === "string") {
+        tiktokOpenIdHint = tikTokPayload.open_id;
       }
     } else if (networkKey === "linkedin") {
       // LinkedIn uses POST with form body
@@ -655,14 +674,19 @@ export async function GET(
         const errorMsg = meData.error?.message ||
                         meData.error?.error_code ||
                         `HTTP ${meRes.status}: ${meRes.statusText}`;
-        console.error("[TikTok callback] user/info failed - will continue with accessToken only:", {
+        console.error("[TikTok callback] user/info failed - falling back to open_id from token response:", {
           status: meRes.status,
           statusText: meRes.statusText,
           error: meData.error,
           errorMsg,
+          hasOpenIdHint: !!tiktokOpenIdHint,
         });
-        // Non-fatal: account can still be saved with just accessToken for now
-        // accountId will remain as extracted from state or fallback
+        // Fallback: use the open_id returned by the token exchange.
+        // This lets us save a real accountId even if user/info fails.
+        if (tiktokOpenIdHint) {
+          accountId = tiktokOpenIdHint;
+          accountName = accountId;
+        }
       } else {
         // Successfully got user info
         accountId = meData.data.user.open_id;
