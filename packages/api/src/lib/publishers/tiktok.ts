@@ -1,12 +1,36 @@
 // ─── TikTok Publisher ─────────────────────────────────────────────────────────
-// Publishes VIDEO posts to TikTok via Content Posting API v2
-// ONLY supports VIDEO post type — other types are rejected with a clear error
-// Uses pull-from-URL approach (no binary upload required)
+// Publishes VIDEO / REEL posts to TikTok via Content Posting API v2.
+//
+// Uses FILE_UPLOAD (not PULL_FROM_URL) because PULL_FROM_URL requires the
+// hosting domain to be pre-verified in the TikTok Developer Portal. Our videos
+// live on Supabase (`*.supabase.co`), which we don't own, so PULL_FROM_URL
+// fails with "URL ownership verification" errors. FILE_UPLOAD sidesteps this
+// entirely by pushing the bytes directly to TikTok.
+//
+// Flow:
+//   1. Fetch the video bytes from the media URL (Supabase public storage).
+//   2. POST /post/publish/video/init/ with source=FILE_UPLOAD + video_size +
+//      chunk_size + total_chunk_count → TikTok returns publish_id + upload_url.
+//   3. PUT each chunk to upload_url with Content-Range + Content-Type.
+//   4. TikTok processes asynchronously; the video appears on TikTok after
+//      ~minutes. We persist publish_id as platformPostId.
+//
+// Chunk constraints (per TikTok docs):
+//   - MIN chunk_size: 5 MB  (only required when total_chunk_count > 1)
+//   - MAX chunk_size: 64 MB
+//   - Last chunk can be smaller than chunk_size.
+//   - For single-chunk uploads, chunk_size === video_size (even if < 5 MB).
+//   - Total video size cap: 4 GB.
 
 import type { PublishContext, PublishResult } from "./index";
 import { buildCaption } from "./index";
 
 const TIKTOK_API = "https://open.tiktokapis.com/v2";
+
+const MIN_CHUNK_SIZE = 5 * 1024 * 1024;       // 5 MB
+const MAX_CHUNK_SIZE = 64 * 1024 * 1024;      // 64 MB
+const DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024;  // 10 MB — balanced default
+const MAX_VIDEO_SIZE = 4 * 1024 * 1024 * 1024; // 4 GB
 
 export async function publishToTikTok(ctx: PublishContext): Promise<PublishResult> {
   // TikTok Content Posting API only supports video
@@ -28,79 +52,145 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
   const title = buildCaption(ctx.copy, ctx.hashtags);
 
   try {
-    return await initVideoPublish(title, ctx.mediaUrls[0], ctx.accessToken);
+    // ── 1. Fetch video bytes ───────────────────────────────────────────────
+    const videoRes = await fetch(ctx.mediaUrls[0]);
+    if (!videoRes.ok) {
+      return {
+        success: false,
+        error: `No se pudo descargar el video desde el almacenamiento (HTTP ${videoRes.status}).`,
+      };
+    }
+    const videoBuf = Buffer.from(await videoRes.arrayBuffer());
+    const videoSize = videoBuf.byteLength;
+    const contentType = videoRes.headers.get("content-type") ?? "video/mp4";
+
+    if (videoSize === 0) {
+      return { success: false, error: "El archivo de video está vacío." };
+    }
+    if (videoSize > MAX_VIDEO_SIZE) {
+      return {
+        success: false,
+        error: "El video supera el tamaño máximo permitido por TikTok (4 GB).",
+      };
+    }
+
+    // ── 2. Decide chunk strategy ───────────────────────────────────────────
+    // Rules:
+    //   - If video_size <= MAX_CHUNK_SIZE → single chunk (chunk_size = video_size).
+    //   - Else → multiple chunks of DEFAULT_CHUNK_SIZE (10 MB). Last chunk
+    //     will be whatever's left (≤ chunk_size).
+    let chunkSize: number;
+    let totalChunkCount: number;
+
+    if (videoSize <= MAX_CHUNK_SIZE) {
+      chunkSize = videoSize; // single chunk; TikTok accepts chunk_size < 5 MB here
+      totalChunkCount = 1;
+    } else {
+      chunkSize = Math.min(
+        Math.max(DEFAULT_CHUNK_SIZE, MIN_CHUNK_SIZE),
+        MAX_CHUNK_SIZE
+      );
+      totalChunkCount = Math.ceil(videoSize / chunkSize);
+    }
+
+    // ── 3. Init publish → get publish_id + upload_url ──────────────────────
+    const initBody = {
+      post_info: {
+        title: title.slice(0, 2200), // TikTok max caption length
+        privacy_level: "PUBLIC_TO_EVERYONE",
+        disable_duet: false,
+        disable_comment: false,
+        disable_stitch: false,
+        video_cover_timestamp_ms: 1000,
+      },
+      source_info: {
+        source: "FILE_UPLOAD",
+        video_size: videoSize,
+        chunk_size: chunkSize,
+        total_chunk_count: totalChunkCount,
+      },
+    };
+
+    const initRes = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        Authorization: `Bearer ${ctx.accessToken}`,
+      },
+      body: JSON.stringify(initBody),
+    });
+
+    const initData = await initRes.json();
+
+    // TikTok Content Posting API v2 response shapes:
+    //   Success: { data: { publish_id, upload_url }, error: { code: "ok", ... } }
+    //   Error:   { error: { code: "...", message: "...", log_id } }
+    const initErrorCode: string | undefined = initData?.error?.code;
+    const hasInitError = initErrorCode && initErrorCode !== "ok";
+    const publishId: string | undefined = initData?.data?.publish_id;
+    const uploadUrl: string | undefined = initData?.data?.upload_url;
+
+    if (!initRes.ok || hasInitError || !publishId || !uploadUrl) {
+      const msg =
+        initData?.error?.message ??
+        initErrorCode ??
+        "Error iniciando publicación en TikTok";
+
+      const requiresReconnect =
+        initRes.status === 401 ||
+        initErrorCode === "access_token_invalid" ||
+        initErrorCode === "scope_not_authorized" ||
+        initErrorCode === "unauthorized";
+
+      return {
+        success: false,
+        error: msg,
+        ...(requiresReconnect ? { requiresReconnect: true } : {}),
+      };
+    }
+
+    // ── 4. Upload chunks ──────────────────────────────────────────────────
+    // PUT each chunk to upload_url with the right Content-Range.
+    // TikTok accepts 200 / 201 / 206 as successful chunk uploads.
+    for (let i = 0; i < totalChunkCount; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, videoSize) - 1;
+      const chunk = videoBuf.subarray(start, end + 1);
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": chunk.byteLength.toString(),
+          "Content-Range": `bytes ${start}-${end}/${videoSize}`,
+        },
+        // Node 18+ fetch accepts Buffer/Uint8Array as body
+        body: chunk,
+      });
+
+      if (![200, 201, 206].includes(uploadRes.status)) {
+        const detail = await uploadRes.text().catch(() => "");
+        return {
+          success: false,
+          error:
+            `Error subiendo chunk ${i + 1}/${totalChunkCount} a TikTok ` +
+            `(HTTP ${uploadRes.status}). ${detail.slice(0, 200)}`,
+        };
+      }
+    }
+
+    // TikTok processes the video asynchronously; it appears on TikTok in
+    // a few minutes. We save publish_id as platformPostId so we can poll
+    // the /post/publish/status/fetch/ endpoint later if needed.
+    return {
+      success: true,
+      platformPostId: publishId,
+      platformUrl: "https://www.tiktok.com/",
+    };
   } catch (err: any) {
-    return { success: false, error: err?.message ?? "Error publicando en TikTok" };
-  }
-}
-
-// ── Init Video Publish (pull-from-URL) ────────────────────────────────────────
-async function initVideoPublish(
-  title: string,
-  videoUrl: string,
-  token: string
-): Promise<PublishResult> {
-  const body = {
-    post_info: {
-      title: title.slice(0, 2200), // TikTok max caption length
-      privacy_level: "PUBLIC_TO_EVERYONE",
-      disable_duet: false,
-      disable_comment: false,
-      disable_stitch: false,
-      video_cover_timestamp_ms: 1000,
-    },
-    source_info: {
-      source: "PULL_FROM_URL",
-      video_url: videoUrl,
-    },
-  };
-
-  const res = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json; charset=UTF-8",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await res.json();
-
-  // TikTok Content Posting API v2 response shapes:
-  //   Success: { data: { publish_id }, error: { code: "ok", message: "", log_id } }
-  //   Error:   { error: { code: "...", message: "...", log_id } }
-  // The old check `data?.error?.code !== "ok"` is correct for this endpoint,
-  // but we harden it: also reject when HTTP failed or publish_id missing,
-  // and detect token-expiration error codes so the caller reconnects the account.
-  const errorCode: string | undefined = data?.error?.code;
-  const hasRealError = errorCode && errorCode !== "ok";
-  const publishId: string | undefined = data?.data?.publish_id;
-
-  if (!res.ok || hasRealError || !publishId) {
-    const errMsg =
-      data?.error?.message ??
-      errorCode ??
-      "Error iniciando publicación en TikTok";
-
-    // Token-related failures → tell caller to reconnect the account
-    const requiresReconnect =
-      res.status === 401 ||
-      errorCode === "access_token_invalid" ||
-      errorCode === "scope_not_authorized" ||
-      errorCode === "unauthorized";
-
     return {
       success: false,
-      error: errMsg,
-      ...(requiresReconnect ? { requiresReconnect: true } : {}),
+      error: err?.message ?? "Error publicando en TikTok",
     };
   }
-
-  // Note: TikTok processes asynchronously. We save the publish_id as platformPostId.
-  // The video will be available on TikTok once processing completes (typically <5 min).
-  return {
-    success: true,
-    platformPostId: publishId,
-    platformUrl: "https://www.tiktok.com/", // Specific URL only available after processing
-  };
 }

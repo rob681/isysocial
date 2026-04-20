@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { appRouter, createContext } from "@isysocial/api";
 
+// Bump to 5 min (Vercel Pro max) — TikTok FILE_UPLOAD publishes can stream
+// multi-MB videos through this function, which blows past the default 60s
+// on slow upstreams. Other mutations finish in ms and aren't affected.
+export const maxDuration = 300;
+
 const handler = async (req: Request) => {
   const session = await getServerSession(authOptions);
 
