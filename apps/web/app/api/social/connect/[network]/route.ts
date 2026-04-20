@@ -44,7 +44,8 @@ const oauthConfig: Record<
   tiktok: {
     authUrl: "https://www.tiktok.com/v2/auth/authorize/",
     // user.info.basic is required to fetch open_id, display_name, avatar_url after OAuth
-    scopes: "user.info.basic,video.publish,video.upload",
+    // TikTok scopes must be space-separated, not comma-separated
+    scopes: "user.info.basic video.publish video.upload",
     clientId: (process.env.TIKTOK_CLIENT_KEY ?? "").trim(),
   },
 };

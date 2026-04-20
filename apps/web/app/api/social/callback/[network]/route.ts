@@ -174,17 +174,51 @@ export async function GET(
         }),
       });
       const tokenData = await tokenRes.json();
-      if (!tokenRes.ok || tokenData.error?.code !== "ok") {
-        throw new Error(
-          tokenData.error?.message ??
-          `Error obteniendo token de TikTok (${tokenData.error?.code ?? tokenRes.status})`
-        );
+      console.log("[TikTok Token Exchange - Full Response]", {
+        status: tokenRes.status,
+        statusText: tokenRes.statusText,
+        code: code,
+        redirectUri,
+        clientId: tokenConfig.clientId,
+        clientSecret: tokenConfig.clientSecret ? "***" : undefined,
+        responseData: tokenData,
+        dataPath: {
+          hasData: !!tokenData.data,
+          dataKeys: tokenData.data ? Object.keys(tokenData.data) : [],
+          accessToken: tokenData.data?.access_token ? "***" : undefined,
+          hasAccessToken: !!tokenData.data?.access_token,
+        },
+      });
+
+      // TikTok API returns {data: {access_token, ...}} on success
+      if (!tokenRes.ok) {
+        const errorMsg = tokenData.error?.error_description ||
+                        tokenData.error?.message ||
+                        `HTTP ${tokenRes.status}: ${tokenRes.statusText}`;
+        throw new Error(`TikTok OAuth Error: ${errorMsg}`);
       }
+
+      if (!tokenData.data?.access_token) {
+        const errorMsg = tokenData.error?.error_description ||
+                        tokenData.error?.message ||
+                        JSON.stringify(tokenData);
+        throw new Error(`TikTok OAuth Error: No access_token returned. ${errorMsg}`);
+      }
+
       accessToken = tokenData.data.access_token;
+      if (!accessToken || typeof accessToken !== "string" || accessToken.trim() === "") {
+        console.error("[TikTok callback] Invalid access_token in response:", {
+          type: typeof accessToken,
+          value: accessToken,
+          fullResponse: tokenData,
+        });
+        throw new Error("TikTok returned invalid access_token");
+      }
+
       // TikTok returns a new refresh_token each exchange; store it
-      refreshToken = tokenData.data.refresh_token ?? undefined;
+      refreshToken = tokenData.data?.refresh_token ?? undefined;
       // access_token expires in 24h; refresh_token expires in ~365 days
-      if (tokenData.data.expires_in) {
+      if (tokenData.data?.expires_in) {
         tokenExpiresAt = new Date(Date.now() + tokenData.data.expires_in * 1000);
       }
     } else if (networkKey === "linkedin") {
@@ -608,18 +642,47 @@ export async function GET(
         }
       );
       const meData = await meRes.json();
-      if (meData.error?.code !== "ok" && !meData.data?.user) {
-        console.error("[tiktok callback] user/info failed:", JSON.stringify(meData.error));
-        // Non-fatal: account can still be saved with empty profile data
+      console.log("[TikTok user/info response]", {
+        status: meRes.status,
+        responseOk: meRes.ok,
+        data: meData,
+        hasData: !!meData.data,
+        hasUser: !!meData.data?.user,
+      });
+
+      // TikTok returns {data: {user: {open_id, display_name, ...}}} on success
+      if (!meRes.ok || !meData.data?.user?.open_id) {
+        const errorMsg = meData.error?.message ||
+                        meData.error?.error_code ||
+                        `HTTP ${meRes.status}: ${meRes.statusText}`;
+        console.error("[TikTok callback] user/info failed - will continue with accessToken only:", {
+          status: meRes.status,
+          statusText: meRes.statusText,
+          error: meData.error,
+          errorMsg,
+        });
+        // Non-fatal: account can still be saved with just accessToken for now
+        // accountId will remain as extracted from state or fallback
+      } else {
+        // Successfully got user info
+        accountId = meData.data.user.open_id;
+        accountName = meData.data.user.display_name
+          ? `@${meData.data.user.display_name}`
+          : accountId;
+        profilePic = meData.data.user.avatar_url ?? undefined;
       }
-      accountId = meData.data?.user?.open_id ?? "";
-      accountName = meData.data?.user?.display_name
-        ? `@${meData.data.user.display_name}`
-        : accountId;
-      profilePic = meData.data?.user?.avatar_url ?? undefined;
     }
 
     // ── Step 3: Upsert ClientSocialNetwork ────────────────────────────────────
+    // Ensure accountId has a value to avoid duplicate records with network name as pageId
+    // For TikTok: if user/info fails, use a hash of the access token as temporary ID
+    if (!accountId && networkKey === "tiktok" && accessToken) {
+      const crypto = require("crypto");
+      const hash = crypto.createHash("sha256").update(accessToken).digest("hex");
+      accountId = `tiktok_${hash.substring(0, 16)}`;
+      console.log("[TikTok callback] Generated temporary accountId:", accountId);
+    }
+
     // Use accountId as fallback for pageId to avoid ghost records with network name as pageId
     const pageIdForNetwork = pageId || accountId || networkEnum;
     await db.clientSocialNetwork.upsert({
