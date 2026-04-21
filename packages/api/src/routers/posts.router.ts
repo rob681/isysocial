@@ -229,21 +229,48 @@ export const postsRouter = router({
       }
       if (input.categoryId) where.categoryId = input.categoryId;
 
+      // Build AND-conditions for search + month so they don't clobber each
+      // other via a shared `OR`. Previously both branches assigned to
+      // `where.OR`, which produced `OR(scheduledAt-in-month, title-match,
+      // copy-match)` — i.e. a post outside the month would show up if the
+      // search matched it, and a post without a scheduledAt would never show
+      // up regardless of its createdAt. Now each filter lives in its own
+      // OR group, combined with AND.
+      const andConditions: any[] = [];
+
       if (input.search) {
-        where.OR = [
-          { title: { contains: input.search, mode: "insensitive" } },
-          { copy: { contains: input.search, mode: "insensitive" } },
-        ];
+        andConditions.push({
+          OR: [
+            { title: { contains: input.search, mode: "insensitive" } },
+            { copy: { contains: input.search, mode: "insensitive" } },
+          ],
+        });
       }
 
-      // Month filter
+      // Month filter — match posts scheduled in the target month, OR (if
+      // they have no scheduled date) posts that were created in that month.
+      // Without the createdAt fallback, DRAFTs / IN_REVIEW posts that were
+      // just created — including TikTok posts saved without a schedule —
+      // silently disappear from /admin/contenido even though they show up
+      // in /admin/aprobaciones (which doesn't filter by month at all).
       if (input.month && input.year) {
         const startDate = new Date(input.year, input.month - 1, 1);
         const endDate = new Date(input.year, input.month, 0, 23, 59, 59, 999);
-        where.OR = [
-          { scheduledAt: { gte: startDate, lte: endDate } },
-          ...(where.OR || []),
-        ];
+        andConditions.push({
+          OR: [
+            { scheduledAt: { gte: startDate, lte: endDate } },
+            {
+              AND: [
+                { scheduledAt: null },
+                { createdAt: { gte: startDate, lte: endDate } },
+              ],
+            },
+          ],
+        });
+      }
+
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
       }
 
       const [posts, total] = await Promise.all([
