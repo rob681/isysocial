@@ -15,8 +15,13 @@ export const calendarRouter = router({
       const agencyId = getAgencyId(ctx);
       const user = ctx.session.user;
 
+      // Widen the query window by ±1 day so posts that fall outside the
+      // month in UTC but inside the month in the user's local timezone
+      // still come through. The client re-buckets by local date.
       const startDate = new Date(input.year, input.month - 1, 1);
+      startDate.setDate(startDate.getDate() - 1);
       const endDate = new Date(input.year, input.month, 0, 23, 59, 59, 999);
+      endDate.setDate(endDate.getDate() + 1);
 
       const where: any = {
         agencyId,
@@ -57,16 +62,12 @@ export const calendarRouter = router({
         },
       });
 
-      // Group by day
-      const byDay: Record<string, typeof posts> = {};
-      for (const post of posts) {
-        if (!post.scheduledAt) continue;
-        const day = post.scheduledAt.toISOString().split("T")[0]!;
-        if (!byDay[day]) byDay[day] = [];
-        byDay[day]!.push(post);
-      }
-
-      return { posts: byDay, month: input.month, year: input.year };
+      // NOTE: grouping by day is done on the CLIENT using the browser's
+      // local timezone. Previously we grouped here with
+      // `post.scheduledAt.toISOString().split("T")[0]` which always uses
+      // UTC — so a post scheduled at 22:00 Mexico local (04:00 UTC next
+      // day) bucketed into the wrong day on the calendar.
+      return { posts, month: input.month, year: input.year };
     }),
 
   // ─── Get Week View ────────────────────────────────────────────────────
@@ -81,9 +82,11 @@ export const calendarRouter = router({
       const agencyId = getAgencyId(ctx);
       const user = ctx.session.user;
 
+      // Widen by ±1 day so timezone edges don't drop posts. Client re-buckets.
       const start = new Date(input.startDate + "T00:00:00");
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
+      start.setDate(start.getDate() - 1);
+      const end = new Date(input.startDate + "T00:00:00");
+      end.setDate(end.getDate() + 7);
       end.setHours(23, 59, 59, 999);
 
       const where: any = {
@@ -117,15 +120,9 @@ export const calendarRouter = router({
         },
       });
 
-      const byDay: Record<string, typeof posts> = {};
-      for (const post of posts) {
-        if (!post.scheduledAt) continue;
-        const day = post.scheduledAt.toISOString().split("T")[0]!;
-        if (!byDay[day]) byDay[day] = [];
-        byDay[day]!.push(post);
-      }
-
-      return { posts: byDay, startDate: input.startDate };
+      // Grouping by day happens on the client using local timezone. See
+      // getMonth for rationale.
+      return { posts, startDate: input.startDate };
     }),
 
   // ─── Get Day View ─────────────────────────────────────────────────────
@@ -140,8 +137,11 @@ export const calendarRouter = router({
       const agencyId = getAgencyId(ctx);
       const user = ctx.session.user;
 
+      // Widen by ±1 day so timezone edges don't drop posts. Client re-buckets.
       const start = new Date(input.date + "T00:00:00");
+      start.setDate(start.getDate() - 1);
       const end = new Date(input.date + "T23:59:59.999");
+      end.setDate(end.getDate() + 1);
 
       const where: any = {
         agencyId,
@@ -174,15 +174,11 @@ export const calendarRouter = router({
         },
       });
 
-      const byHour: Record<number, typeof posts> = {};
-      for (const post of posts) {
-        if (!post.scheduledAt) continue;
-        const hour = post.scheduledAt.getHours();
-        if (!byHour[hour]) byHour[hour] = [];
-        byHour[hour]!.push(post);
-      }
-
-      return { posts, byHour, date: input.date };
+      // NOTE: grouping by hour is done on the CLIENT with the browser's
+      // local timezone. `scheduledAt.getHours()` here would return the
+      // hour in UTC (Vercel runtime), so a post scheduled for 11:00
+      // Mexico local showed up in the 17:00 bucket — off by UTC offset.
+      return { posts, date: input.date };
     }),
 
   // ─── Get Upcoming Posts ────────────────────────────────────────────────

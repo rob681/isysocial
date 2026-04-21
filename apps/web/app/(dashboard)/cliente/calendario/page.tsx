@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ChevronLeft, ChevronRight, Calendar, FileImage, CalendarDays, CalendarRange, CalendarClock } from "lucide-react";
 import { NETWORK_LABELS, NETWORK_COLORS, POST_STATUS_LABELS, POST_STATUS_COLORS, getHolidaysForMonth, getMiscDaysForMonth, HOLIDAY_REGION_LABELS } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, HolidayRegion } from "@isysocial/shared";
-import { cn } from "@/lib/utils";
+import { cn, localYMD, localHour } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { DayView } from "@/components/calendar/day-view";
@@ -35,7 +35,9 @@ function getCalendarDays(year: number, month: number) {
 
 function getMondayOfWeek(date: Date): string {
   const d = new Date(date); const day = d.getDay(); d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-  return d.toISOString().split("T")[0]!;
+  // Use local YYYY-MM-DD — `toISOString` would return UTC and shift the week
+  // boundary across the date line for non-UTC timezones.
+  return localYMD(d)!;
 }
 
 export default function ClienteCalendarioPage() {
@@ -46,7 +48,7 @@ export default function ClienteCalendarioPage() {
   const [holidayRegions, setHolidayRegions] = useState<HolidayRegion[]>(["MX"]);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(now));
-  const [dayDate, setDayDate] = useState(() => now.toISOString().split("T")[0]!);
+  const [dayDate, setDayDate] = useState(() => localYMD(now)!);
 
   useEffect(() => { const s = localStorage.getItem("isysocial-calendar-view"); if (s === "month" || s === "week" || s === "day") setViewMode(s); }, []);
   const handleViewChange = (v: CalendarViewMode) => { setViewMode(v); localStorage.setItem("isysocial-calendar-view", v); };
@@ -58,29 +60,70 @@ export default function ClienteCalendarioPage() {
   const calendarDays = useMemo(() => getCalendarDays(year, month), [year, month]);
   const holidays = useMemo(() => getHolidaysForMonth(year, month, holidayRegions), [year, month, holidayRegions]);
   const miscDays = useMemo(() => getMiscDaysForMonth(year, month), [year, month]);
-  const today = now.toISOString().split("T")[0];
+  const today = localYMD(now)!;
+
+  // ── Client-side bucketing in the browser's local timezone ────────────────
+  // The server returns a flat `posts` array with a ±1-day buffer; we bucket
+  // here so the day/hour boundaries follow the user's local time instead of
+  // UTC (which was producing the "11:00 post shows in 17:00 row" bug and
+  // "post published at 10pm appears on next day" bug).
+  const monthPostsByDay = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const p of (monthData?.posts as any[] | undefined) ?? []) {
+      const key = localYMD(p.scheduledAt);
+      if (!key) continue;
+      (map[key] ??= []).push(p);
+    }
+    return map;
+  }, [monthData]);
+  const weekPostsByDay = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const p of (weekData?.posts as any[] | undefined) ?? []) {
+      const key = localYMD(p.scheduledAt);
+      if (!key) continue;
+      (map[key] ??= []).push(p);
+    }
+    return map;
+  }, [weekData]);
+  const dayPostsByHour = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    for (const p of (dayData?.posts as any[] | undefined) ?? []) {
+      const h = localHour(p.scheduledAt);
+      if (h === null) continue;
+      (map[h] ??= []).push(p);
+    }
+    return map;
+  }, [dayData]);
+  // Only posts that fall inside the viewed day in *local* time (the server
+  // may send neighboring days due to the ±1-day buffer).
+  const dayAllPosts = useMemo(() => {
+    return ((dayData?.posts as any[] | undefined) ?? []).filter((p) => {
+      if (!p.scheduledAt) return true; // unscheduled belong to the current view
+      return localYMD(p.scheduledAt) === dayDate;
+    });
+  }, [dayData, dayDate]);
 
   const prevPeriod = () => {
     if (viewMode === "month") { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
-    else if (viewMode === "week") { const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() - 7); setWeekStart(d.toISOString().split("T")[0]!); }
-    else { const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() - 1); setDayDate(d.toISOString().split("T")[0]!); }
+    else if (viewMode === "week") { const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() - 7); setWeekStart(localYMD(d)!); }
+    else { const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() - 1); setDayDate(localYMD(d)!); }
   };
   const nextPeriod = () => {
     if (viewMode === "month") { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
-    else if (viewMode === "week") { const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() + 7); setWeekStart(d.toISOString().split("T")[0]!); }
-    else { const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() + 1); setDayDate(d.toISOString().split("T")[0]!); }
+    else if (viewMode === "week") { const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() + 7); setWeekStart(localYMD(d)!); }
+    else { const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() + 1); setDayDate(localYMD(d)!); }
   };
-  const goToday = () => { setMonth(now.getMonth() + 1); setYear(now.getFullYear()); setWeekStart(getMondayOfWeek(now)); setDayDate(now.toISOString().split("T")[0]!); };
+  const goToday = () => { setMonth(now.getMonth() + 1); setYear(now.getFullYear()); setWeekStart(getMondayOfWeek(now)); setDayDate(localYMD(now)!); };
 
   const periodTitle = viewMode === "month" ? `${MONTH_NAMES[month - 1]} ${year}`
     : viewMode === "week" ? (() => { const s = new Date(weekStart + "T12:00:00"); const e = new Date(s); e.setDate(e.getDate() + 6); return `${s.getDate()} ${s.toLocaleDateString("es",{month:"short"})} — ${e.getDate()} ${e.toLocaleDateString("es",{month:"short"})} ${e.getFullYear()}`; })()
     : new Date(dayDate + "T12:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  const dayPosts = selectedDay && monthData?.posts?.[selectedDay] ? monthData.posts[selectedDay] : [];
+  const dayPosts = selectedDay ? (monthPostsByDay[selectedDay] ?? []) : [];
   const isLoading = viewMode === "month" ? monthLoading : viewMode === "week" ? weekLoading : dayLoading;
 
   // Check if any posts need review (for client highlight)
-  const hasReviewPosts = monthData ? Object.values(monthData.posts).some((posts: any) => posts.some((p: any) => p.status === "IN_REVIEW")) : false;
+  const hasReviewPosts = ((monthData?.posts as any[] | undefined) ?? []).some((p: any) => p.status === "IN_REVIEW");
 
   return (
     <div className="flex flex-col flex-1">
@@ -133,14 +176,14 @@ export default function ClienteCalendarioPage() {
       )}
 
       {isLoading ? <Skeleton className="h-[600px] w-full rounded-lg" />
-        : viewMode === "week" && weekData ? <WeekView startDate={weekData.startDate} postsByDay={weekData.posts as any} basePath="/cliente/contenido" />
-        : viewMode === "day" && dayData ? <DayView date={dayData.date} postsByHour={dayData.byHour as any} allPosts={dayData.posts as any} basePath="/cliente/contenido" />
+        : viewMode === "week" && weekData ? <WeekView startDate={weekData.startDate} postsByDay={weekPostsByDay as any} basePath="/cliente/contenido" />
+        : viewMode === "day" && dayData ? <DayView date={dayData.date} postsByHour={dayPostsByHour as any} allPosts={dayAllPosts as any} basePath="/cliente/contenido" />
         : (
         <div className="border rounded-lg overflow-hidden bg-card">
           <div className="grid grid-cols-7 border-b">{DAY_NAMES.map(d => <div key={d} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground bg-muted/30">{d}</div>)}</div>
           <div className="grid grid-cols-7">
             {calendarDays.map((dayInfo, i) => {
-              const posts = monthData?.posts?.[dayInfo.date] || []; const dayHolidays = holidays.get(dayInfo.date) || []; const dayMisc = miscDays.get(dayInfo.date) || []; const isToday = dayInfo.date === today;
+              const posts = monthPostsByDay[dayInfo.date] || []; const dayHolidays = holidays.get(dayInfo.date) || []; const dayMisc = miscDays.get(dayInfo.date) || []; const isToday = dayInfo.date === today;
               const hasReview = posts.some((p: any) => p.status === "IN_REVIEW");
               return (
                 <div key={i} className={cn("min-h-[90px] p-1.5 border-b border-r cursor-pointer transition-colors hover:bg-accent/30", !dayInfo.isCurrentMonth && "bg-muted/20 opacity-50", isToday && "bg-blue-50 dark:bg-blue-950/20", hasReview && dayInfo.isCurrentMonth && "bg-yellow-50/50 dark:bg-yellow-950/10", dayHolidays.length > 0 && dayInfo.isCurrentMonth && "bg-amber-50/50 dark:bg-amber-950/10")}

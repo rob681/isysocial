@@ -81,3 +81,29 @@ const TIMEZONE_SHORT_LABELS: Record<string, string> = {
 export function getTimezoneShortLabel(tz: string): string {
   return TIMEZONE_SHORT_LABELS[tz] ?? tz.split("/").pop()?.replace("_", " ") ?? tz;
 }
+
+// ─── Local-timezone date helpers ──────────────────────────────────────────────
+// `Date#toISOString()` and `Date#getUTCHours()` always return UTC, which breaks
+// day/hour buckets for calendars running in a different server timezone (e.g.
+// Vercel runs UTC; a post at 11:00 Mexico local shows in the 17:00 UTC bucket).
+// These helpers use the browser's local `Date` methods so grouping matches
+// the user's perceived date/hour.
+
+/** Returns `YYYY-MM-DD` in the browser's local timezone. */
+export function localYMD(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Returns the hour (0-23) in the browser's local timezone, or null if invalid. */
+export function localHour(date: Date | string | null | undefined): number | null {
+  if (!date) return null;
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getHours();
+}

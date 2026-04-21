@@ -34,7 +34,7 @@ import {
   HOLIDAY_REGION_LABELS,
 } from "@isysocial/shared";
 import type { SocialNetwork, PostStatus, PostType, HolidayRegion, MiscDay } from "@isysocial/shared";
-import { cn } from "@/lib/utils";
+import { cn, localYMD, localHour } from "@/lib/utils";
 import { Topbar } from "@/components/layout/topbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { DayView } from "@/components/calendar/day-view";
@@ -78,7 +78,8 @@ function getMondayOfWeek(date: Date): string {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
-  return d.toISOString().split("T")[0]!;
+  // Local YYYY-MM-DD so week boundary follows the user's timezone, not UTC.
+  return localYMD(d)!;
 }
 
 function CalendarioPageInner() {
@@ -98,7 +99,7 @@ function CalendarioPageInner() {
   }, [clientIdFromUrl]);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(now));
-  const [dayDate, setDayDate] = useState(() => now.toISOString().split("T")[0]!);
+  const [dayDate, setDayDate] = useState(() => localYMD(now)!);
 
   useEffect(() => {
     const saved = localStorage.getItem("isysocial-calendar-view");
@@ -140,17 +141,54 @@ function CalendarioPageInner() {
   const calendarDays = useMemo(() => getCalendarDays(year, month), [year, month]);
   const holidays = useMemo(() => getHolidaysForMonth(year, month, holidayRegions), [year, month, holidayRegions]);
   const miscDays = useMemo(() => getMiscDaysForMonth(year, month), [year, month]);
-  const today = now.toISOString().split("T")[0];
+  const today = localYMD(now)!;
+
+  // ── Client-side bucketing in the browser's local timezone ────────────────
+  // Server returns flat arrays with ±1-day buffer; bucket locally so the
+  // day/hour boundaries follow the user's timezone rather than UTC.
+  const monthPostsByDay = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const p of (monthData?.posts as any[] | undefined) ?? []) {
+      const key = localYMD(p.scheduledAt);
+      if (!key) continue;
+      (map[key] ??= []).push(p);
+    }
+    return map;
+  }, [monthData]);
+  const weekPostsByDay = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const p of (weekData?.posts as any[] | undefined) ?? []) {
+      const key = localYMD(p.scheduledAt);
+      if (!key) continue;
+      (map[key] ??= []).push(p);
+    }
+    return map;
+  }, [weekData]);
+  const dayPostsByHour = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    for (const p of (dayData?.posts as any[] | undefined) ?? []) {
+      const h = localHour(p.scheduledAt);
+      if (h === null) continue;
+      (map[h] ??= []).push(p);
+    }
+    return map;
+  }, [dayData]);
+  const dayAllPosts = useMemo(() => {
+    return ((dayData?.posts as any[] | undefined) ?? []).filter((p) => {
+      if (!p.scheduledAt) return true;
+      return localYMD(p.scheduledAt) === dayDate;
+    });
+  }, [dayData, dayDate]);
 
   const prevPeriod = () => {
     if (viewMode === "month") {
       if (month === 1) { setMonth(12); setYear((y) => y - 1); } else setMonth((m) => m - 1);
     } else if (viewMode === "week") {
       const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() - 7);
-      setWeekStart(d.toISOString().split("T")[0]!);
+      setWeekStart(localYMD(d)!);
     } else {
       const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() - 1);
-      setDayDate(d.toISOString().split("T")[0]!);
+      setDayDate(localYMD(d)!);
     }
   };
   const nextPeriod = () => {
@@ -158,15 +196,15 @@ function CalendarioPageInner() {
       if (month === 12) { setMonth(1); setYear((y) => y + 1); } else setMonth((m) => m + 1);
     } else if (viewMode === "week") {
       const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() + 7);
-      setWeekStart(d.toISOString().split("T")[0]!);
+      setWeekStart(localYMD(d)!);
     } else {
       const d = new Date(dayDate + "T12:00:00"); d.setDate(d.getDate() + 1);
-      setDayDate(d.toISOString().split("T")[0]!);
+      setDayDate(localYMD(d)!);
     }
   };
   const goToday = () => {
     setMonth(now.getMonth() + 1); setYear(now.getFullYear());
-    setWeekStart(getMondayOfWeek(now)); setDayDate(now.toISOString().split("T")[0]!);
+    setWeekStart(getMondayOfWeek(now)); setDayDate(localYMD(now)!);
   };
 
   const periodTitle = viewMode === "month"
@@ -178,7 +216,7 @@ function CalendarioPageInner() {
         })()
       : new Date(dayDate + "T12:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  const dayPosts = selectedDay && monthData?.posts?.[selectedDay] ? monthData.posts[selectedDay] : [];
+  const dayPosts = selectedDay ? (monthPostsByDay[selectedDay] ?? []) : [];
   const isLoading = viewMode === "month" ? monthLoading : viewMode === "week" ? weekLoading : dayLoading;
 
   return (
@@ -262,9 +300,9 @@ function CalendarioPageInner() {
       {isLoading ? (
         <Skeleton className="h-[600px] w-full rounded-lg" />
       ) : viewMode === "week" && weekData ? (
-        <WeekView startDate={weekData.startDate} postsByDay={weekData.posts as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
+        <WeekView startDate={weekData.startDate} postsByDay={weekPostsByDay as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
       ) : viewMode === "day" && dayData ? (
-        <DayView date={dayData.date} postsByHour={dayData.byHour as any} allPosts={dayData.posts as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
+        <DayView date={dayData.date} postsByHour={dayPostsByHour as any} allPosts={dayAllPosts as any} basePath="/admin/contenido" dayThemeMap={dayThemeMap} />
       ) : (
         <div className="border rounded-lg overflow-hidden bg-card">
           <div className="grid grid-cols-7 border-b">
@@ -293,7 +331,7 @@ function CalendarioPageInner() {
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((dayInfo, i) => {
-              const posts = monthData?.posts?.[dayInfo.date] || [];
+              const posts = monthPostsByDay[dayInfo.date] || [];
               const dayHolidays = holidays.get(dayInfo.date) || [];
               const dayMisc = miscDays.get(dayInfo.date) || [];
               const isToday = dayInfo.date === today;
