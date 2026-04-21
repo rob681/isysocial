@@ -64,7 +64,27 @@ export function CalendarScheduler({
     value || new Date()
   );
   const [hours, setHours] = useState(selectedDate.getHours());
-  const [minutes, setMinutes] = useState(selectedDate.getMinutes());
+  // Snap the initial minute value to the nearest multiple of 5 so the
+  // display starts on a clean step (e.g. "11:20" rather than "11:21" which
+  // the stepper could never reach).
+  const [minutes, setMinutes] = useState(
+    (Math.round(selectedDate.getMinutes() / 5) * 5) % 60
+  );
+
+  // Step minutes in 5-min increments, snap-aligning to the nearest multiple
+  // of 5 in the direction of travel. Previous implementation used
+  // `m - 5` / `m + 5` directly, which:
+  //   1. Produced negative numbers when starting from a non-multiple of 5
+  //      (e.g. 21 → 16 → 11 → 6 → 1 → -4).
+  //   2. Made it impossible to land on 0 or any other multiple of 5 from a
+  //      misaligned start — you'd skip right past.
+  const stepMinutes = (dir: -1 | 1) => {
+    setMinutes((m) => {
+      const next =
+        dir === 1 ? Math.floor(m / 5) * 5 + 5 : Math.ceil(m / 5) * 5 - 5;
+      return ((next % 60) + 60) % 60;
+    });
+  };
 
   const [repeatType, setRepeatType] = useState<RepeatConfig["type"]>("once");
   const [repeatEndDate, setRepeatEndDate] = useState<Date | undefined>();
@@ -109,6 +129,9 @@ export function CalendarScheduler({
     switch (type) {
       case "now1h":
         d.setHours(d.getHours() + 1);
+        // Snap minutes to the nearest multiple of 5 so the preset lands
+        // on a clean step the stepper can reach (10:21 → 11:20, not 11:21).
+        d.setMinutes((Math.round(d.getMinutes() / 5) * 5) % 60);
         break;
       case "tomorrow9am":
         d.setDate(d.getDate() + 1);
@@ -263,7 +286,7 @@ export function CalendarScheduler({
               <span className="text-muted-foreground">:</span>
               <div className="flex-1 flex items-center justify-center gap-2">
                 <button
-                  onClick={() => setMinutes((m) => (m === 0 ? 55 : m - 5))}
+                  onClick={() => stepMinutes(-1)}
                   className="p-1 rounded hover:bg-accent"
                 >
                   <Minus className="h-4 w-4" />
@@ -272,7 +295,7 @@ export function CalendarScheduler({
                   {String(minutes).padStart(2, "0")}
                 </span>
                 <button
-                  onClick={() => setMinutes((m) => (m === 55 ? 0 : m + 5))}
+                  onClick={() => stepMinutes(1)}
                   className="p-1 rounded hover:bg-accent"
                 >
                   <Plus className="h-4 w-4" />
