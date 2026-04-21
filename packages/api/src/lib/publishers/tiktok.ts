@@ -147,12 +147,24 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
     const privacyLevelOptions: string[] = Array.isArray(creator.privacy_level_options)
       ? creator.privacy_level_options
       : [];
-    // Prefer PUBLIC_TO_EVERYONE when available (audited app), else fall back
-    // to the first allowed level (typically SELF_ONLY for sandbox/unaudited).
-    const privacyLevel =
-      privacyLevelOptions.includes("PUBLIC_TO_EVERYONE")
-        ? "PUBLIC_TO_EVERYONE"
-        : (privacyLevelOptions[0] ?? "SELF_ONLY");
+    // Per TikTok Content Sharing Guidelines
+    // (https://developers.tiktok.com/doc/content-sharing-guidelines/):
+    //   - Unaudited apps: ONLY SELF_ONLY is permitted, regardless of what
+    //     creator_info returns. Posting with PUBLIC_TO_EVERYONE from an
+    //     unaudited app is rejected with
+    //     `unaudited_client_can_only_post_to_private_accounts` (HTTP 403).
+    //   - Additionally, the creator's account must be set to Private in
+    //     TikTok mobile settings for the post to succeed.
+    //   - Audited apps: the end-user must manually select the privacy_level
+    //     from privacy_level_options (no default).
+    //
+    // Strategy: prefer SELF_ONLY when available (safest, works for unaudited
+    // apps + private accounts). If it's not in the options (unusual), fall
+    // back to the first returned option. Once the app gets audited we'll
+    // expose a UI picker.
+    const privacyLevel = privacyLevelOptions.includes("SELF_ONLY")
+      ? "SELF_ONLY"
+      : (privacyLevelOptions[0] ?? "SELF_ONLY");
 
     // Respect creator-level toggles — TikTok rejects the init if we try to
     // enable an interaction the creator has disabled in their settings.
@@ -161,14 +173,11 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
     const disableStitch = !!creator.stitch_disabled;
 
     // ── 4. Init publish → get publish_id + upload_url ──────────────────────
-    // Content disclosure fields (required for unaudited apps):
-    //   - disclose_video_content: required=true when posting from a 3rd-party app
-    //     so TikTok can show the "Promotional content" disclosure banner in the app.
-    //     Omitting this on an unaudited app returns a generic
-    //     "content-sharing-guidelines" rejection.
-    //   - brand_content_toggle / brand_organic_toggle: must be explicitly set to
-    //     false if we aren't disclosing branded content. TikTok rejects the init
-    //     if either is true without `disclose_video_content: true`.
+    // Note: brand_content_toggle / brand_organic_toggle default to false on
+    // TikTok's side — we omit them rather than sending false explicitly, to
+    // avoid any edge-case validation on "unnecessary fields present" that
+    // some TikTok endpoints check. disclose_video_content is only needed if
+    // we're actually disclosing promotional/branded content, which we're not.
     const initBody = {
       post_info: {
         title: title.slice(0, 2200), // TikTok max caption length
@@ -177,9 +186,6 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
         disable_comment: disableComment,
         disable_stitch: disableStitch,
         video_cover_timestamp_ms: 1000,
-        disclose_video_content: true,
-        brand_content_toggle: false,
-        brand_organic_toggle: false,
       },
       source_info: {
         source: "FILE_UPLOAD",
@@ -230,15 +236,52 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
         })
       );
 
-      const baseMsg =
-        initData?.error?.message ??
-        initErrorCode ??
-        "Error iniciando publicación en TikTok";
-      // Surface the TikTok error code in the user-facing string so support can
-      // map it back to TikTok docs without digging through server logs.
-      const msg = initErrorCode
-        ? `${baseMsg} (code: ${initErrorCode})`
-        : baseMsg;
+      // Map well-known TikTok error codes to actionable Spanish messages so
+      // the user knows what to do, instead of getting the raw TikTok docs URL.
+      let msg: string;
+      switch (initErrorCode) {
+        case "unaudited_client_can_only_post_to_private_accounts":
+          msg =
+            "TikTok rechazó la publicación porque nuestra app está pendiente de auditoría. " +
+            "Mientras tanto, solo podemos publicar en cuentas configuradas como Privadas en TikTok. " +
+            "Ve a TikTok móvil → Perfil → Menú (☰) → Configuración → Privacidad y activa 'Cuenta privada'. " +
+            "Cuando la app sea auditada por TikTok, podrás volver a poner tu cuenta en pública.";
+          break;
+        case "privacy_level_option_mismatch":
+          msg =
+            "El nivel de privacidad seleccionado no coincide con los permitidos por tu cuenta de TikTok. " +
+            "Intenta reconectar TikTok o revisa la configuración de privacidad de tu cuenta.";
+          break;
+        case "spam_risk_too_many_posts":
+          msg =
+            "TikTok bloqueó la publicación por exceso de posts recientes. " +
+            "Espera ~24 horas antes de volver a intentar.";
+          break;
+        case "spam_risk_user_banned_from_posting":
+          msg =
+            "TikTok bloqueó la publicación porque la cuenta está restringida para publicar. " +
+            "Revisa el estado de la cuenta directamente en TikTok.";
+          break;
+        case "reached_active_user_cap":
+          msg =
+            "Nuestra app (sin auditar) alcanzó el límite de 5 usuarios activos por 24h impuesto por TikTok. " +
+            "Espera un día o solicita la auditoría de la app para quitar este límite.";
+          break;
+        case "url_ownership_unverified":
+          msg =
+            "TikTok rechazó la URL del video por falta de verificación de dominio. " +
+            "Reporta este error — deberíamos estar usando FILE_UPLOAD en lugar de PULL_FROM_URL.";
+          break;
+        default: {
+          const baseMsg =
+            initData?.error?.message ??
+            initErrorCode ??
+            "Error iniciando publicación en TikTok";
+          // Surface the TikTok error code in the user-facing string so support
+          // can map it back to TikTok docs without digging through server logs.
+          msg = initErrorCode ? `${baseMsg} (code: ${initErrorCode})` : baseMsg;
+        }
+      }
 
       const requiresReconnect =
         initRes.status === 401 ||
