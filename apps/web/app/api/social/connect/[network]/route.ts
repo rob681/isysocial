@@ -42,13 +42,19 @@ const oauthConfig: Record<
   },
   tiktok: {
     authUrl: "https://www.tiktok.com/v2/auth/authorize/",
-    // user.info.basic is required to fetch open_id, display_name, avatar_url after OAuth
-    // TikTok scopes must be space-separated, not comma-separated
-    // NOTE: Both video.publish AND video.upload require TikTok approval.
-    // Temporarily using only user.info.basic to enable account connection flow.
-    // TODO: Re-add video.upload and video.publish scopes once TikTok approves
-    //   Content Posting API access (application currently in review).
-    scopes: "user.info.basic",
+    // TikTok v2 OAuth uses COMMA-SEPARATED scopes (per Login Kit docs:
+    // "A comma (,) separated string of authorization scope(s)").
+    //
+    // Scopes approved for our app (Live in production since Apr 17, 2026):
+    //   - user.info.basic → read open_id, display_name, avatar_url
+    //   - video.publish   → Direct Post (publish directly to user's profile)
+    //   - video.upload    → upload as draft for creator to post from the app
+    //
+    // NOTE: even with video.publish approved, Direct Post is still restricted
+    // to SELF_ONLY + private-account-only until we clear the separate
+    // "Direct Post audit" from the Developer Portal. See tiktok.ts publisher
+    // for the privacy_level logic.
+    scopes: "user.info.basic,video.publish,video.upload",
     clientId: (process.env.TIKTOK_CLIENT_KEY ?? "").trim(),
   },
 };
