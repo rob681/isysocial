@@ -121,10 +121,17 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
     const creator = creatorData?.data;
 
     if (!creatorRes.ok || creatorHasErr || !creator) {
-      const msg =
+      console.error(
+        "[TikTok] creator_info failed:",
+        JSON.stringify({ status: creatorRes.status, error: creatorData?.error })
+      );
+      const baseMsg =
         creatorData?.error?.message ??
         creatorErrCode ??
         "Error consultando la información del creador en TikTok";
+      const msg = creatorErrCode
+        ? `${baseMsg} (code: ${creatorErrCode})`
+        : baseMsg;
       const requiresReconnect =
         creatorRes.status === 401 ||
         creatorErrCode === "access_token_invalid" ||
@@ -154,6 +161,14 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
     const disableStitch = !!creator.stitch_disabled;
 
     // ── 4. Init publish → get publish_id + upload_url ──────────────────────
+    // Content disclosure fields (required for unaudited apps):
+    //   - disclose_video_content: required=true when posting from a 3rd-party app
+    //     so TikTok can show the "Promotional content" disclosure banner in the app.
+    //     Omitting this on an unaudited app returns a generic
+    //     "content-sharing-guidelines" rejection.
+    //   - brand_content_toggle / brand_organic_toggle: must be explicitly set to
+    //     false if we aren't disclosing branded content. TikTok rejects the init
+    //     if either is true without `disclose_video_content: true`.
     const initBody = {
       post_info: {
         title: title.slice(0, 2200), // TikTok max caption length
@@ -162,6 +177,9 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
         disable_comment: disableComment,
         disable_stitch: disableStitch,
         video_cover_timestamp_ms: 1000,
+        disclose_video_content: true,
+        brand_content_toggle: false,
+        brand_organic_toggle: false,
       },
       source_info: {
         source: "FILE_UPLOAD",
@@ -191,10 +209,36 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
     const uploadUrl: string | undefined = initData?.data?.upload_url;
 
     if (!initRes.ok || hasInitError || !publishId || !uploadUrl) {
-      const msg =
+      // Log full response server-side so we can diagnose exactly what TikTok
+      // rejected. Without this, `content-sharing-guidelines` is a black box.
+      console.error(
+        "[TikTok] init failed:",
+        JSON.stringify({
+          status: initRes.status,
+          error: initData?.error,
+          data: initData?.data,
+          sent: {
+            privacy_level: privacyLevel,
+            privacy_level_options: privacyLevelOptions,
+            disable_comment: disableComment,
+            disable_duet: disableDuet,
+            disable_stitch: disableStitch,
+            video_size: videoSize,
+            chunk_size: chunkSize,
+            total_chunk_count: totalChunkCount,
+          },
+        })
+      );
+
+      const baseMsg =
         initData?.error?.message ??
         initErrorCode ??
         "Error iniciando publicación en TikTok";
+      // Surface the TikTok error code in the user-facing string so support can
+      // map it back to TikTok docs without digging through server logs.
+      const msg = initErrorCode
+        ? `${baseMsg} (code: ${initErrorCode})`
+        : baseMsg;
 
       const requiresReconnect =
         initRes.status === 401 ||
