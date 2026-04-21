@@ -9,11 +9,20 @@
 //
 // Flow:
 //   1. Fetch the video bytes from the media URL (Supabase public storage).
-//   2. POST /post/publish/video/init/ with source=FILE_UPLOAD + video_size +
+//   2. Decide chunk strategy based on video size.
+//   3. POST /post/publish/creator_info/query/ → get privacy_level_options
+//      and creator interaction flags (comment/duet/stitch disabled).
+//   4. POST /post/publish/video/init/ with source=FILE_UPLOAD + video_size +
 //      chunk_size + total_chunk_count → TikTok returns publish_id + upload_url.
-//   3. PUT each chunk to upload_url with Content-Range + Content-Type.
-//   4. TikTok processes asynchronously; the video appears on TikTok after
+//   5. PUT each chunk to upload_url with Content-Range + Content-Type.
+//   6. TikTok processes asynchronously; the video appears on TikTok after
 //      ~minutes. We persist publish_id as platformPostId.
+//
+// Privacy level: we NEVER hard-code "PUBLIC_TO_EVERYONE". Instead we pick
+// the first allowed level from creator_info.privacy_level_options, preferring
+// public when available. Unaudited / sandbox apps typically only get
+// "SELF_ONLY" — posting publicly from them returns a
+// "content-sharing-guidelines" rejection.
 //
 // Chunk constraints (per TikTok docs):
 //   - MIN chunk_size: 5 MB  (only required when total_chunk_count > 1)
@@ -93,14 +102,65 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
       totalChunkCount = Math.ceil(videoSize / chunkSize);
     }
 
-    // ── 3. Init publish → get publish_id + upload_url ──────────────────────
+    // ── 3. Query creator_info ──────────────────────────────────────────────
+    // TikTok requires apps to honor the creator's privacy settings and only
+    // use privacy levels that are allowed for the user's account. Unaudited
+    // / sandbox apps typically only get SELF_ONLY; audited apps get public +
+    // mutual-friends levels. Hard-coding PUBLIC_TO_EVERYONE triggers the
+    // "content-sharing-guidelines" rejection.
+    const creatorRes = await fetch(`${TIKTOK_API}/post/publish/creator_info/query/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        Authorization: `Bearer ${ctx.accessToken}`,
+      },
+    });
+    const creatorData = await creatorRes.json();
+    const creatorErrCode: string | undefined = creatorData?.error?.code;
+    const creatorHasErr = creatorErrCode && creatorErrCode !== "ok";
+    const creator = creatorData?.data;
+
+    if (!creatorRes.ok || creatorHasErr || !creator) {
+      const msg =
+        creatorData?.error?.message ??
+        creatorErrCode ??
+        "Error consultando la información del creador en TikTok";
+      const requiresReconnect =
+        creatorRes.status === 401 ||
+        creatorErrCode === "access_token_invalid" ||
+        creatorErrCode === "scope_not_authorized" ||
+        creatorErrCode === "unauthorized";
+      return {
+        success: false,
+        error: msg,
+        ...(requiresReconnect ? { requiresReconnect: true } : {}),
+      };
+    }
+
+    const privacyLevelOptions: string[] = Array.isArray(creator.privacy_level_options)
+      ? creator.privacy_level_options
+      : [];
+    // Prefer PUBLIC_TO_EVERYONE when available (audited app), else fall back
+    // to the first allowed level (typically SELF_ONLY for sandbox/unaudited).
+    const privacyLevel =
+      privacyLevelOptions.includes("PUBLIC_TO_EVERYONE")
+        ? "PUBLIC_TO_EVERYONE"
+        : (privacyLevelOptions[0] ?? "SELF_ONLY");
+
+    // Respect creator-level toggles — TikTok rejects the init if we try to
+    // enable an interaction the creator has disabled in their settings.
+    const disableComment = !!creator.comment_disabled;
+    const disableDuet = !!creator.duet_disabled;
+    const disableStitch = !!creator.stitch_disabled;
+
+    // ── 4. Init publish → get publish_id + upload_url ──────────────────────
     const initBody = {
       post_info: {
         title: title.slice(0, 2200), // TikTok max caption length
-        privacy_level: "PUBLIC_TO_EVERYONE",
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
+        privacy_level: privacyLevel,
+        disable_duet: disableDuet,
+        disable_comment: disableComment,
+        disable_stitch: disableStitch,
         video_cover_timestamp_ms: 1000,
       },
       source_info: {
@@ -149,7 +209,7 @@ export async function publishToTikTok(ctx: PublishContext): Promise<PublishResul
       };
     }
 
-    // ── 4. Upload chunks ──────────────────────────────────────────────────
+    // ── 5. Upload chunks ──────────────────────────────────────────────────
     // PUT each chunk to upload_url with the right Content-Range.
     // TikTok accepts 200 / 201 / 206 as successful chunk uploads.
     for (let i = 0; i < totalChunkCount; i++) {
