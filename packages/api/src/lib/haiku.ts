@@ -71,7 +71,10 @@ Reglas:
 - ${params.includeHashtags ? "Incluye 3-5 hashtags relevantes al final" : "NO incluyas hashtags"}
 - Genera exactamente ${params.versions} versión(es) diferente(s)
 - Cada versión debe ser única en enfoque y estilo
-- Separa cada versión con el delimitador: ---VERSION---`;
+- Separa cada versión con el delimitador: ---VERSION---
+- NO incluyas etiquetas, encabezados ni títulos como "Versión 1:", "Versión 2: Tono cercano", "Opción 1:", "Variante X:" ni ningún meta-comentario antes del copy
+- Cada versión debe empezar DIRECTAMENTE con el texto del copy, sin introducción, sin numeración y sin describir el tono
+- NO uses markdown como **negritas** para titular las versiones`;
 
   if (params.brandContext) {
     systemPrompt += `\n\nContexto de la marca:\n${params.brandContext}`;
@@ -91,11 +94,33 @@ Reglas:
 
   const versions = content
     .split("---VERSION---")
-    .map((v) => v.trim())
+    .map((v) => stripVersionHeader(v.trim()))
     .filter((v) => v.length > 0);
 
-  if (versions.length === 0) return [content.trim()];
+  if (versions.length === 0) return [stripVersionHeader(content.trim())];
   return versions.slice(0, params.versions);
+}
+
+/**
+ * Defensive strip: removes leading "Versión N:", "Opción N:", "Variante N:",
+ * etc. headers that the model may still emit despite the system prompt rules.
+ * Also removes markdown wrappers around those headers.
+ */
+function stripVersionHeader(text: string): string {
+  if (!text) return text;
+  // Remove up to 2 leading header lines (e.g. "**Versión 2**\nTono casual\n...")
+  let out = text;
+  for (let i = 0; i < 2; i++) {
+    const stripped = out.replace(
+      /^\s*(?:[*_#>\-]+\s*)*(?:versi[oó]n|opci[oó]n|variante|version|option)\s*\d*\s*[:.\-–—]?[^\n]*\n+/i,
+      "",
+    );
+    if (stripped === out) break;
+    out = stripped;
+  }
+  // Also strip a standalone "Tono X" style subtitle if it remained on its own line at the start
+  out = out.replace(/^\s*(?:[*_#>\-]+\s*)*tono[^\n]*\n+/i, "");
+  return out.trim();
 }
 
 // ─── Brand Text Generation ────────────────────────────────────────────────────
@@ -188,9 +213,9 @@ ${contextParts.length > 0 ? `Contexto de la marca:\n${contextParts.join("\n")}` 
 
   const versions = content
     .split("---VERSION---")
-    .map((v) => v.trim())
+    .map((v) => stripVersionHeader(v.trim()))
     .filter((v) => v.length > 0);
 
-  if (versions.length === 0) return [content.trim()];
+  if (versions.length === 0) return [stripVersionHeader(content.trim())];
   return versions.slice(0, params.versions);
 }
