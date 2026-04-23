@@ -83,13 +83,16 @@ async function publishWithImages(
     title: { text: "" },
   }));
 
+  // For LinkedIn UGC Posts API, multi-image posts use shareMediaCategory="IMAGE"
+  // (not "ARTICLE" — that's for link previews, not image collections).
+  // LinkedIn renders multiple "IMAGE" media items as a carousel-like gallery.
   const body = {
     author: authorUrn,
     lifecycleState: "PUBLISHED",
     specificContent: {
       "com.linkedin.ugc.ShareContent": {
         shareCommentary: { text },
-        shareMediaCategory: uploadedAssets.length === 1 ? "IMAGE" : "ARTICLE",
+        shareMediaCategory: "IMAGE",
         media,
       },
     },

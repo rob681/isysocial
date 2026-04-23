@@ -209,6 +209,28 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
 
   const onSubmit = (data: FormValues, sendForReview = false) => {
     const trimmedPurpose = data.purpose?.trim() || "";
+
+    // CAROUSEL validation: min 2, max 10 media items (Facebook/Instagram limit)
+    if (data.postType === "CAROUSEL") {
+      const totalMedia = existingMedia.length + uploadedMedia.length;
+      if (totalMedia < 2) {
+        toast({
+          title: "Carrusel incompleto",
+          description: "Un carrusel necesita al menos 2 archivos. Sube una imagen o video más.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (totalMedia > 10) {
+        toast({
+          title: "Demasiados archivos",
+          description: `El carrusel permite máximo 10 archivos. Actualmente tienes ${totalMedia}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (postId) {
       updateContent.mutate({
         id: postId,

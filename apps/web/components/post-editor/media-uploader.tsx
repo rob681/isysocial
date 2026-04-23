@@ -170,7 +170,8 @@ export function MediaUploader({
   );
 
   const isMultiple = postType === "CAROUSEL";
-  const acceptsVideo = ["REEL", "VIDEO", "STORY"].includes(postType);
+  // CAROUSEL supports mixed image + video on Instagram, Facebook, LinkedIn
+  const acceptsVideo = ["REEL", "VIDEO", "STORY", "CAROUSEL"].includes(postType);
   const accept = acceptsVideo
     ? "image/*,video/mp4,video/quicktime,video/webm"
     : "image/*";
@@ -403,10 +404,15 @@ export function MediaUploader({
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Click para subir {acceptsVideo ? "imagen o video" : "imagen"}
-              {isMultiple ? " (múltiples archivos)" : ""}
+              {isMultiple
+                ? "Click para subir varios archivos (imágenes y videos)"
+                : `Click para subir ${acceptsVideo ? "imagen o video" : "imagen"}`}
             </p>
-            <p className="text-xs text-muted-foreground/60">Máximo 50 MB por archivo</p>
+            <p className="text-xs text-muted-foreground/60">
+              {isMultiple
+                ? "Carrusel: mínimo 2, máximo 10 archivos · 50 MB por archivo"
+                : "Máximo 50 MB por archivo"}
+            </p>
           </div>
         )}
       </div>

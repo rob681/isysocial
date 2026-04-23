@@ -450,6 +450,29 @@ export const postsRouter = router({
         }
       }
 
+      // CAROUSEL validation on forward transitions (IN_REVIEW, APPROVED, SCHEDULED, PUBLISHED).
+      // A carousel requires at least 2 media items. This is the defensive check —
+      // the client-side validation catches most cases, but a post may be sent back to
+      // DRAFT and re-submitted with media removed, so we re-check on every forward move.
+      if (
+        post.postType === "CAROUSEL" &&
+        ["IN_REVIEW", "APPROVED", "SCHEDULED", "PUBLISHED"].includes(toStatus)
+      ) {
+        const mediaCount = await ctx.db.postMedia.count({ where: { postId: post.id } });
+        if (mediaCount < 2) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Un carrusel necesita al menos 2 archivos. Actualmente tiene ${mediaCount}.`,
+          });
+        }
+        if (mediaCount > 10) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Un carrusel admite máximo 10 archivos. Actualmente tiene ${mediaCount}.`,
+          });
+        }
+      }
+
       let statusToUpdate = toStatus;
       const updateData: any = { status: toStatus };
 
