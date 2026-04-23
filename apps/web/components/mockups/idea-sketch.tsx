@@ -34,8 +34,10 @@ interface IdeaSketchMockupProps {
   className?: string;
   /** Array of image/video URLs to display */
   images?: string[];
-  /** Whether the first item is a video */
+  /** Whether the first item is a video (legacy; use videoFlags for mixed carousels) */
   isVideo?: boolean;
+  /** Per-index video flags — takes precedence over isVideo when provided */
+  videoFlags?: boolean[];
 }
 
 // ─── Inner card (shared between compact + expanded) ────────────────────────
@@ -45,13 +47,17 @@ function SketchCard({
   networks = [],
   images = [],
   isVideo = false,
+  videoFlags,
   expanded = false,
 }: IdeaSketchMockupProps & { expanded?: boolean }) {
   const [imgIdx, setImgIdx] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
   const hasImages = images.length > 0;
   const currentImg = images[imgIdx] ?? null;
-  const isCurrentVideo = isVideo && imgIdx === 0;
+  // Prefer per-index videoFlags; fall back to legacy isVideo (index 0 only).
+  const isCurrentVideo = videoFlags
+    ? !!videoFlags[imgIdx]
+    : isVideo && imgIdx === 0;
 
   const truncDesc =
     !descExpanded && description && description.length > DESC_MAX
@@ -374,6 +380,7 @@ export function IdeaSketchMockup({
   className,
   images = [],
   isVideo = false,
+  videoFlags,
 }: IdeaSketchMockupProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -435,6 +442,7 @@ export function IdeaSketchMockup({
             networks={networks}
             images={images}
             isVideo={isVideo}
+            videoFlags={videoFlags}
           />
         </div>
       </div>
@@ -483,6 +491,7 @@ export function IdeaSketchMockup({
                   networks={networks}
                   images={images}
                   isVideo={isVideo}
+                  videoFlags={videoFlags}
                   expanded
                 />
               </div>

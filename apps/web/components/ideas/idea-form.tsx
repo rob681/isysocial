@@ -42,9 +42,14 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
   const [clientId, setClientId] = useState<string>(initialClientId ?? "");
   const [tentativeDate, setTentativeDate] = useState<string>("");
 
-  // Image upload state
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // Media upload state — supports multiple files (images + videos mixed).
+  // Each item has its own preview URL + type, so we can render a gallery strip.
+  type PendingMedia = {
+    file: File;
+    previewUrl: string;
+    isVideo: boolean;
+  };
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,32 +76,52 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
 
   // ── Media handlers ──
 
+  const MAX_MEDIA = 10;
+
+  const isVideoFile = (file: File) => file.type.startsWith("video/");
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    processFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    processFiles(files);
+    // Reset so re-selecting the same file works
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const isVideo = (file: File) => file.type.startsWith("video/");
+  const processFiles = (files: File[]) => {
+    const accepted: PendingMedia[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+        toast({ title: "Solo se permiten imágenes y videos", variant: "destructive" });
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast({
+          title: "Archivo demasiado grande",
+          description: `${file.name} supera 50MB`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      const previewUrl = URL.createObjectURL(file);
+      accepted.push({ file, previewUrl, isVideo: isVideoFile(file) });
+    }
+    if (accepted.length === 0) return;
 
-  const processFile = (file: File) => {
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      toast({ title: "Solo se permiten imágenes y videos", variant: "destructive" });
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      toast({ title: "El archivo no puede superar 50MB", variant: "destructive" });
-      return;
-    }
-    setImageFile(file);
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
-    } else {
-      // Video — use object URL for preview
-      setImagePreview(URL.createObjectURL(file));
-    }
+    setPendingMedia((prev) => {
+      const merged = [...prev, ...accepted];
+      if (merged.length > MAX_MEDIA) {
+        toast({
+          title: "Máximo 10 archivos",
+          description: "Se ignoraron los archivos adicionales.",
+          variant: "destructive",
+        });
+        // Revoke the object URLs we won't keep
+        merged.slice(MAX_MEDIA).forEach((m) => URL.revokeObjectURL(m.previewUrl));
+        return merged.slice(0, MAX_MEDIA);
+      }
+      return merged;
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -107,15 +132,16 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const file = e.dataTransfer.files?.[0];
-    if (file) processFile(file);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length > 0) processFiles(files);
   };
 
-  const removeImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removeMediaAt = (index: number) => {
+    setPendingMedia((prev) => {
+      const removed = prev[index];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   // ── Submit ──
@@ -139,24 +165,26 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
         tentativeDate: tentativeDate ? new Date(tentativeDate) : undefined,
       });
 
-      // Step 2: Upload image if selected (direct to Supabase — bypasses Vercel limit)
-      if (imageFile) {
+      // Step 2: Upload all selected media (direct to Supabase — bypasses Vercel 4.5MB limit)
+      if (pendingMedia.length > 0) {
         try {
-          const upload = await uploadFileToStorage(imageFile, "ideas");
+          const uploads = await Promise.all(
+            pendingMedia.map((m) => uploadFileToStorage(m.file, "ideas"))
+          );
           await addMedia.mutateAsync({
             ideaId: idea.id,
-            files: [{
-              fileName: upload.fileName,
-              fileUrl: upload.url,
-              storagePath: upload.storagePath,
-              mimeType: upload.mimeType,
-            }],
+            files: uploads.map((u) => ({
+              fileName: u.fileName,
+              fileUrl: u.url,
+              storagePath: u.storagePath,
+              mimeType: u.mimeType,
+            })),
           });
         } catch (err: any) {
           // Non-blocking: idea was already created, but warn the user
-          console.error("Error uploading image:", err);
+          console.error("Error uploading media:", err);
           toast({
-            title: "Idea creada, pero la imagen no se pudo guardar",
+            title: "Idea creada, pero algunos archivos no se guardaron",
             description: err.message,
             variant: "destructive",
           });
@@ -233,58 +261,79 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                   />
                 </div>
 
-                {/* Image Upload Zone — compact thumbnail */}
+                {/* Media Upload Zone — supports multiple files (carousel) */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
-                    Imagen o video de referencia
+                    Imágenes o videos de referencia
+                    {pendingMedia.length > 0 && (
+                      <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                        ({pendingMedia.length}/{MAX_MEDIA})
+                      </span>
+                    )}
                   </label>
 
-                  {imagePreview ? (
-                    /* Compact thumbnail strip */
-                    <div className="flex items-center gap-3 p-2.5 border rounded-xl bg-zinc-50 dark:bg-zinc-800/50">
-                      {/* Thumbnail */}
-                      <div
-                        className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-200 dark:bg-zinc-700 cursor-pointer"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        {imageFile && isVideo(imageFile) ? (
-                          <video
-                            src={imagePreview}
-                            className="w-full h-full object-cover"
-                            muted
-                            playsInline
-                          />
-                        ) : (
-                          <img
-                            src={imagePreview}
-                            alt="Preview"
-                            className="w-full h-full object-cover"
-                          />
+                  {pendingMedia.length > 0 ? (
+                    /* Gallery strip — thumbnails + add more */
+                    <div
+                      className="p-2.5 border rounded-xl bg-zinc-50 dark:bg-zinc-800/50"
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        {pendingMedia.map((m, i) => (
+                          <div
+                            key={`${m.file.name}-${i}`}
+                            className="relative group w-20 h-20 rounded-lg overflow-hidden bg-zinc-200 dark:bg-zinc-700 flex-shrink-0"
+                          >
+                            {m.isVideo ? (
+                              <video
+                                src={m.previewUrl}
+                                className="w-full h-full object-cover"
+                                muted
+                                playsInline
+                              />
+                            ) : (
+                              <img
+                                src={m.previewUrl}
+                                alt={m.file.name}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            {/* Order badge */}
+                            <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-semibold rounded px-1.5 py-0.5">
+                              {i + 1}
+                            </span>
+                            {/* Video badge */}
+                            {m.isVideo && (
+                              <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-semibold rounded px-1.5 py-0.5">
+                                Video
+                              </span>
+                            )}
+                            {/* Remove */}
+                            <button
+                              type="button"
+                              onClick={() => removeMediaAt(i)}
+                              className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {/* Add more tile */}
+                        {pendingMedia.length < MAX_MEDIA && (
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:border-primary/50 hover:bg-primary/5 transition-colors text-muted-foreground"
+                          >
+                            <ImagePlus className="h-5 w-5" />
+                            <span className="text-[10px]">Agregar</span>
+                          </button>
                         )}
                       </div>
-                      {/* File info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{imageFile?.name}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {imageFile && isVideo(imageFile) ? "Video" : "Imagen"} ·{" "}
-                          {imageFile ? (imageFile.size / 1024 / 1024).toFixed(1) : "?"}MB
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-xs text-primary hover:underline mt-0.5"
-                        >
-                          Cambiar archivo
-                        </button>
-                      </div>
-                      {/* Remove */}
-                      <button
-                        type="button"
-                        onClick={removeImage}
-                        className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Arrastra más archivos o haz clic en &ldquo;Agregar&rdquo;. Máximo {MAX_MEDIA}, 50MB por archivo.
+                      </p>
                     </div>
                   ) : (
                     /* Drop zone — compact */
@@ -299,7 +348,7 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                         Arrastra o haz clic para seleccionar
                       </p>
                       <p className="text-xs text-muted-foreground/60 mt-0.5">
-                        PNG, JPG, WebP, MP4, MOV (máx. 50MB)
+                        PNG, JPG, WebP, MP4, MOV · hasta {MAX_MEDIA} archivos · 50MB por archivo
                       </p>
                     </div>
                   )}
@@ -308,6 +357,7 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,video/*"
+                    multiple
                     className="hidden"
                     onChange={handleFileSelect}
                   />
@@ -436,8 +486,8 @@ export function IdeaForm({ redirectPath, initialClientId }: IdeaFormProps) {
                   title={title || undefined}
                   description={description || undefined}
                   networks={selectedNetworks}
-                  images={imagePreview ? [imagePreview] : []}
-                  isVideo={imageFile ? isVideo(imageFile) : false}
+                  images={pendingMedia.map((m) => m.previewUrl)}
+                  videoFlags={pendingMedia.map((m) => m.isVideo)}
                 />
               </div>
             </div>

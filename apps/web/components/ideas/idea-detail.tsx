@@ -41,6 +41,22 @@ import { uploadFileToStorage } from "@/lib/upload";
 import type { SocialNetwork, PostType, IdeaStatus } from "@isysocial/shared";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { SortableMediaTile } from "@/components/ideas/sortable-media-tile";
 
 interface IdeaDetailProps {
   basePath: string;
@@ -83,6 +99,38 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
   const deleteIdea = trpc.ideas.delete.useMutation({ onSuccess: () => { toast({ title: "Idea eliminada" }); router.push(backPath); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const addMedia = trpc.ideas.addMedia.useMutation({ onSuccess: () => { refetch(); toast({ title: "Imagen agregada" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
   const removeMedia = trpc.ideas.removeMedia.useMutation({ onSuccess: () => { refetch(); toast({ title: "Imagen eliminada" }); }, onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }) });
+  const reorderMedia = trpc.ideas.reorderMedia.useMutation({
+    onSuccess: () => { refetch(); },
+    onError: (err) => { refetch(); toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  // Local override of media order so reorder feels instant while the
+  // mutation is in flight. Cleared whenever the server data arrives and
+  // the two lists match.
+  const [localMediaOrder, setLocalMediaOrder] = useState<string[] | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleMediaDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !idea) return;
+    // Compute the current order based on any optimistic override,
+    // falling back to the server-side sortOrder from idea.media.
+    const currentOrder =
+      localMediaOrder ?? [...idea.media]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((m) => m.id);
+    const oldIndex = currentOrder.indexOf(active.id as string);
+    const newIndex = currentOrder.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const nextOrder = arrayMove(currentOrder, oldIndex, newIndex);
+    setLocalMediaOrder(nextOrder);
+    reorderMedia.mutate({ ideaId: idea.id, mediaIds: nextOrder });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -122,6 +170,23 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
   const networkColor = idea.network ? NETWORK_COLORS[idea.network as SocialNetwork] : null;
   const isLocked = ["CONVERTED", "DISCARDED"].includes(idea.status);
   const canEditThis = canEdit || (idea.isClientIdea && canUploadMedia);
+
+  // Media shown in sortable order. If a local optimistic order exists and
+  // still matches the server's set of ids, use it; otherwise fall back
+  // to server-side sortOrder. This keeps reorders feeling instant while
+  // in flight but stays consistent after add/remove.
+  const serverOrdered = [...idea.media].sort(
+    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+  );
+  const serverIds = serverOrdered.map((m) => m.id);
+  const localStillValid =
+    localMediaOrder &&
+    localMediaOrder.length === serverIds.length &&
+    localMediaOrder.every((id) => serverIds.includes(id));
+  const orderedMediaIds = localStillValid ? localMediaOrder! : serverIds;
+  const orderedMedia = orderedMediaIds
+    .map((id) => idea.media.find((m) => m.id === id))
+    .filter((m): m is (typeof idea.media)[number] => !!m);
 
   const startEditing = () => {
     setEditTitle(idea.title);
@@ -301,28 +366,65 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
               title={idea.title}
               description={idea.description || undefined}
               networks={idea.networks?.length ? idea.networks : idea.network ? [idea.network] : []}
-              images={idea.media.map((m) => m.fileUrl).filter(Boolean) as string[]}
+              images={orderedMedia.map((m) => m.fileUrl).filter(Boolean) as string[]}
+              videoFlags={orderedMedia.map((m) => (m.mimeType ?? "").startsWith("video/"))}
             />
           </div>
 
-          {/* Media upload — compact, no gallery (images shown in mockup above) */}
-          {(canEdit || canUploadMedia) && !isLocked && (
-            <div>
-              <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileUpload} />
-              <Button variant="outline" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                {uploading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Subiendo...</>
-                ) : (
-                  <><Upload className="h-4 w-4 mr-2" />
-                  Agregar imágenes
-                  {idea.media.length > 0 && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">({idea.media.length})</span>
+          {/* Media upload + sortable gallery */}
+          {((canEdit || canUploadMedia) && !isLocked) || orderedMedia.length > 0 ? (
+            <div className="space-y-3">
+              {(canEdit || canUploadMedia) && !isLocked && (
+                <>
+                  <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileUpload} />
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                    {uploading ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />Subiendo...</>
+                    ) : (
+                      <><Upload className="h-4 w-4 mr-2" />
+                      Agregar imágenes
+                      {orderedMedia.length > 0 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">({orderedMedia.length})</span>
+                      )}
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+
+              {/* Sortable media gallery — shows the carousel order */}
+              {orderedMedia.length > 0 && (
+                <div>
+                  {orderedMedia.length > 1 && canEditThis && !isLocked && (
+                    <p className="text-xs text-muted-foreground mb-2 px-1">
+                      Arrastra para reordenar el carrusel
+                    </p>
                   )}
-                  </>
-                )}
-              </Button>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleMediaDragEnd}
+                  >
+                    <SortableContext items={orderedMediaIds} strategy={rectSortingStrategy}>
+                      <div className="grid grid-cols-3 gap-2">
+                        {orderedMedia.map((m, i) => (
+                          <SortableMediaTile
+                            key={m.id}
+                            id={m.id}
+                            index={i}
+                            fileUrl={m.fileUrl}
+                            mimeType={m.mimeType}
+                            canEdit={canEditThis && !isLocked}
+                            onRemove={() => removeMedia.mutate({ mediaId: m.id })}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
 
           {/* Reference Links */}
           <Card>

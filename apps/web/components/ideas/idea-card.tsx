@@ -9,6 +9,7 @@ import {
   Calendar,
   Play,
   User2,
+  Layers,
 } from "lucide-react";
 import { VideoThumbnail } from "@/components/ui/video-thumbnail";
 import {
@@ -51,6 +52,10 @@ export function IdeaCard({ idea, basePath, isDraggable, onDragStart }: IdeaCardP
   const firstMedia = idea.media?.[0];
   const thumbnail = firstMedia?.fileUrl;
   const isVideo = firstMedia?.mimeType?.startsWith("video/") ?? false;
+  // Prefer the full count from _count (server-side aggregate); fall back to
+  // the length of the media array if _count isn't available.
+  const mediaCount = idea._count?.media ?? idea.media?.length ?? 0;
+  const isCarousel = mediaCount > 1;
 
   return (
     <Link href={`${basePath}/${idea.id}`}>
@@ -84,6 +89,14 @@ export function IdeaCard({ idea, basePath, isDraggable, onDragStart }: IdeaCardP
                 alt=""
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
+            )}
+
+            {/* Carousel indicator — top-right */}
+            {isCarousel && (
+              <span className="absolute top-2 right-2 inline-flex items-center gap-1 bg-black/60 text-white text-[10px] font-semibold rounded-full px-2 py-0.5 backdrop-blur-sm">
+                <Layers className="h-3 w-3" />
+                {mediaCount}
+              </span>
             )}
           </div>
         )}

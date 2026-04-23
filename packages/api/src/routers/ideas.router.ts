@@ -551,6 +551,61 @@ export const ideasRouter = router({
       return { success: true };
     }),
 
+  // ─── Reorder Media ────────────────────────────────────────────────────────
+  // Accepts the ordered list of mediaIds for a given idea and rewrites
+  // sortOrder accordingly. This is what drives carousel display order.
+  reorderMedia: protectedProcedure
+    .input(
+      z.object({
+        ideaId: z.string(),
+        mediaIds: z.array(z.string()).min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+      const user = ctx.session.user;
+
+      const idea = await ctx.db.idea.findFirst({
+        where: { id: input.ideaId, agencyId },
+        select: { id: true, clientId: true, createdById: true, isClientIdea: true },
+      });
+      if (!idea) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Idea no encontrada" });
+      }
+
+      // Clients can only reorder media on their own client ideas
+      if (user.role === "CLIENTE") {
+        if (!idea.isClientIdea || idea.createdById !== user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "No puedes reordenar esta idea" });
+        }
+      }
+
+      // Verify all media belong to this idea (defense-in-depth)
+      const existing = await ctx.db.ideaMedia.findMany({
+        where: { ideaId: input.ideaId },
+        select: { id: true },
+      });
+      const validIds = new Set(existing.map((m) => m.id));
+      const allBelong = input.mediaIds.every((id) => validIds.has(id));
+      if (!allBelong || input.mediaIds.length !== existing.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "La lista de medios no coincide con la idea",
+        });
+      }
+
+      await ctx.db.$transaction(
+        input.mediaIds.map((id, i) =>
+          ctx.db.ideaMedia.update({
+            where: { id },
+            data: { sortOrder: i },
+          })
+        )
+      );
+
+      return { success: true };
+    }),
+
   // ─── Convert Idea to Post ─────────────────────────────────────────────────
   convertToPost: adminOrPermissionProcedure("CREATE_POSTS")
     .input(
