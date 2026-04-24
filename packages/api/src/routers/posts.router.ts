@@ -1579,7 +1579,7 @@ export const postsRouter = router({
         sourcePostId: z.string(),
         targetClientIds: z.array(z.string()).min(1, "Selecciona al menos un cliente"),
         keepScheduledAt: z.boolean().default(false),
-        initialStatus: z.enum(["DRAFT", "PENDING_REVIEW"]).default("DRAFT"),
+        initialStatus: z.enum(["DRAFT", "IN_REVIEW"]).default("DRAFT"),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1654,6 +1654,10 @@ export const postsRouter = router({
             referenceLink: source.referenceLink,
             // Note: categoryId is not copied because categories are per-client.
             status: input.initialStatus,
+            reviewDeadline:
+              input.initialStatus === "IN_REVIEW"
+                ? new Date(Date.now() + 48 * 60 * 60 * 1000)
+                : null,
           },
         });
 

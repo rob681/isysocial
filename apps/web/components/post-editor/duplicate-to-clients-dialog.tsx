@@ -121,7 +121,7 @@ export function DuplicateToClientsDialog({
       sourcePostId,
       targetClientIds: selectedIds,
       keepScheduledAt: keepSchedule,
-      initialStatus: sendForReview ? "PENDING_REVIEW" : "DRAFT",
+      initialStatus: sendForReview ? "IN_REVIEW" : "DRAFT",
     });
   };
 
