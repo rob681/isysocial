@@ -29,6 +29,7 @@ import {
   Upload,
   TrendingUp,
   Users,
+  Share2,
   X,
 } from "lucide-react";
 import {
@@ -60,6 +61,7 @@ import { RevisionHistory } from "@/components/post-editor/revision-history";
 import { MediaVersionComparator } from "@/components/post-editor/media-version-comparator";
 import { MediaVersionUploadModal } from "@/components/post-editor/media-version-upload-modal";
 import { PublishPostDialog } from "@/components/publish-post-dialog";
+import { DuplicateToClientsDialog } from "@/components/post-editor/duplicate-to-clients-dialog";
 import { Topbar } from "@/components/layout/topbar";
 import { VideoReviewPanel } from "@/components/video/video-review-panel";
 
@@ -194,6 +196,7 @@ export default function PostDetailPage() {
   const [isInternal, setIsInternal] = useState(false);
   const [statusNote, setStatusNote] = useState("");
   const [mirrorDialogOpen, setMirrorDialogOpen] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [mirrorNetworks, setMirrorNetworks] = useState<string[]>([]);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [asignadosOpen, setAsignadosOpen] = useState(false);
@@ -350,19 +353,36 @@ export default function PostDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {userRole === "ADMIN" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // Pre-select all networks except the current one
-                const allNets = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"];
-                setMirrorNetworks(allNets.filter((n) => n !== post.network));
-                setMirrorDialogOpen(true);
-              }}
-            >
-              <Copy className="h-4 w-4 mr-2" />
-              Mirror
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Pre-select only networks this client has connected (excluding current)
+                  const connected = Array.from(
+                    new Set(
+                      (post.client?.socialNetworks ?? [])
+                        .filter((sn: any) => sn.isActive)
+                        .map((sn: any) => sn.network)
+                    )
+                  );
+                  setMirrorNetworks(connected.filter((n) => n !== post.network));
+                  setMirrorDialogOpen(true);
+                }}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Mirror
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDuplicateDialogOpen(true)}
+                title="Duplicar este contenido en otros clientes de la agencia"
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                Compartir
+              </Button>
+            </>
           )}
           {(userRole === "ADMIN") && (post.status === "APPROVED" || post.status === "SCHEDULED") && (
             <Button
@@ -830,7 +850,7 @@ export default function PostDetailPage() {
         />
       )}
 
-      {/* Mirror Dialog */}
+      {/* Mirror Dialog — only shows networks this client actually has connected */}
       <Dialog open={mirrorDialogOpen} onOpenChange={setMirrorDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
@@ -841,29 +861,54 @@ export default function PostDetailPage() {
               Selecciona las redes donde quieres duplicar esta publicación.
               El copy y hashtags se copiarán automáticamente.
             </p>
-            <div className="space-y-2">
-              {(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TIKTOK", "X"] as const)
-                .filter((n) => n !== post.network)
-                .map((net) => (
-                  <label key={net} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={mirrorNetworks.includes(net)}
-                      onChange={(e) =>
-                        setMirrorNetworks((prev) =>
-                          e.target.checked ? [...prev, net] : prev.filter((n) => n !== net)
-                        )
-                      }
-                      className="rounded"
-                    />
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: NETWORK_COLORS[net] }}
-                    />
-                    <span className="text-sm">{NETWORK_LABELS[net]}</span>
-                  </label>
-                ))}
-            </div>
+            {(() => {
+              // Derive the set of networks connected for THIS client (dedupe defensively
+              // in case legacy duplicate rows exist before the cleanup migration lands).
+              const connected = Array.from(
+                new Set(
+                  (post.client?.socialNetworks ?? [])
+                    .filter((sn: any) => sn.isActive)
+                    .map((sn: any) => sn.network as SocialNetwork)
+                )
+              );
+              const available = connected.filter((n) => n !== post.network);
+
+              if (available.length === 0) {
+                return (
+                  <div className="p-4 rounded-md border border-dashed text-center text-sm text-muted-foreground">
+                    Este cliente no tiene otras redes conectadas para hacer mirror.
+                    Conecta más redes desde la ficha del cliente.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-2">
+                  {available.map((net) => (
+                    <label
+                      key={net}
+                      className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mirrorNetworks.includes(net)}
+                        onChange={(e) =>
+                          setMirrorNetworks((prev) =>
+                            e.target.checked ? [...prev, net] : prev.filter((n) => n !== net)
+                          )
+                        }
+                        className="rounded"
+                      />
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: NETWORK_COLORS[net] }}
+                      />
+                      <span className="text-sm">{NETWORK_LABELS[net]}</span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setMirrorDialogOpen(false)}>
                 Cancelar
@@ -884,6 +929,21 @@ export default function PostDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate to other clients */}
+      {duplicateDialogOpen && (
+        <DuplicateToClientsDialog
+          open={duplicateDialogOpen}
+          onOpenChange={setDuplicateDialogOpen}
+          sourcePostId={post.id}
+          sourceClientId={post.clientId}
+          sourceClientName={post.client?.companyName ?? "Cliente"}
+          sourceNetwork={post.network as SocialNetwork}
+          sourceHasSchedule={!!post.scheduledAt}
+          onSuccess={() => refetch()}
+        />
+      )}
+
       {/* Version Upload Modal */}
       {versionUpload && (
         <MediaVersionUploadModal

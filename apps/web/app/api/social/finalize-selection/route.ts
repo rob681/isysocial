@@ -142,23 +142,13 @@ export async function POST(req: NextRequest) {
         ? "LINKEDIN"
         : selectedPage.id;
 
-    // Remove any previous direct-OAuth entries for this client+network that don't have an
-    // agencyAccountId — they were from a previous selection and should be replaced.
-    await db.clientSocialNetwork.deleteMany({
-      where: {
-        clientId,
-        network: networkEnum as any,
-        agencyAccountId: null,
-        NOT: { pageId: pageIdForNetwork },
-      },
-    });
-
+    // Unique key is now (clientId, network) — the upsert will overwrite pageId/token
+    // regardless of which Page the user previously selected. No pre-delete needed.
     await db.clientSocialNetwork.upsert({
       where: {
-        clientId_network_pageId: {
+        clientId_network: {
           clientId,
           network: networkEnum as any,
-          pageId: pageIdForNetwork,
         },
       },
       update: {
@@ -172,6 +162,8 @@ export async function POST(req: NextRequest) {
         isActive: true,
         assignedAt: new Date(),
         tokenScope: null,
+        tokenExpired: false,
+        tokenErrorMsg: null,
       },
       create: {
         clientId,

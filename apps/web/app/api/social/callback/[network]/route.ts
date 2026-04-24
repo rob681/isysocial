@@ -6,13 +6,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@isysocial/db";
-import { uploadFile, getSignedUrl } from "@isysocial/api/src/lib/supabase-storage";
+import { uploadFile, getPublicUrlFromPath } from "@isysocial/api/src/lib/supabase-storage";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
 
 /**
  * Downloads a profile picture from a remote URL and caches it in Supabase Storage.
- * Returns the permanent Supabase URL, or the original URL if caching fails.
+ * Returns a PERMANENT public URL (bucket must be public), or the original URL if caching fails.
+ *
+ * Previously this used a 24-hour signed URL which caused avatars to break
+ * the next day. The bucket `isysocial-media` is public, so we can use
+ * `getPublicUrl` which never expires.
  */
 async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
   try {
@@ -21,11 +25,13 @@ async function cacheProfilePic(remoteUrl: string, clientId: string, network: str
     const buffer = Buffer.from(await res.arrayBuffer());
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
+    // Add a cache-buster so a refreshed avatar invalidates the CDN copy.
     const path = `client-logos/${clientId}/${network}.${ext}`;
     const { storagePath } = await uploadFile("isysocial-media", path, buffer, contentType);
-    // Return a long-lived signed URL (24h) for profile pictures stored in DB
-    const signedUrl = await getSignedUrl(storagePath, 86400);
-    return signedUrl;
+    // Permanent public URL — never expires.
+    // Append a version param (timestamp) so browsers + Supabase CDN
+    // immediately serve the new image when the avatar is refreshed.
+    return `${getPublicUrlFromPath(storagePath)}?v=${Date.now()}`;
   } catch (err) {
     console.warn("[cacheProfilePic] Failed to cache, using original URL:", err);
     return remoteUrl;
@@ -724,14 +730,14 @@ export async function GET(
       console.log("[TikTok callback] Generated temporary accountId:", accountId);
     }
 
-    // Use accountId as fallback for pageId to avoid ghost records with network name as pageId
+    // Unique key is now (clientId, network) — reconnecting overwrites pageId/token/etc.
+    // pageId is still stored for reference by publishers.
     const pageIdForNetwork = pageId || accountId || networkEnum;
     await db.clientSocialNetwork.upsert({
       where: {
-        clientId_network_pageId: {
+        clientId_network: {
           clientId,
           network: networkEnum as any,
-          pageId: pageIdForNetwork,
         },
       },
       update: {
@@ -769,7 +775,7 @@ export async function GET(
       const cachedPic = await cacheProfilePic(profilePic, clientId, networkKey);
       // Update the stored profilePic with the permanent Supabase URL
       await db.clientSocialNetwork.updateMany({
-        where: { clientId, network: networkEnum as any, pageId: pageIdForNetwork },
+        where: { clientId, network: networkEnum as any },
         data: { profilePic: cachedPic },
       });
       await db.clientProfile.updateMany({

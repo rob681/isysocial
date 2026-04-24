@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientLogo } from "@/components/ui/client-logo";
 import {
   FileImage,
   Calendar,
@@ -210,13 +211,11 @@ export default function EditorDashboardPage() {
                   const pct = Math.round((client.count / maxCount) * 100);
                   return (
                     <div key={client.clientId} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {client.logoUrl ? (
-                          <img src={client.logoUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <Users className="h-3.5 w-3.5 text-muted-foreground/40" />
-                        )}
-                      </div>
+                      <ClientLogo
+                        src={client.logoUrl}
+                        name={client.name}
+                        size="w-8 h-8"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-sm font-medium truncate">{client.name}</p>

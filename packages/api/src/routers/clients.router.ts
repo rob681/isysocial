@@ -293,17 +293,15 @@ export const clientsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado" });
       }
 
-      // Upsert each network
+      // Upsert each network — unique on (clientId, network)
       for (const net of input.networks) {
-        // Use pageId if available, otherwise use network as fallback for backward compatibility
         const pageId = net.pageId || net.network;
 
         await ctx.db.clientSocialNetwork.upsert({
           where: {
-            clientId_network_pageId: {
+            clientId_network: {
               clientId: input.clientId,
               network: net.network,
-              pageId: pageId,
             },
           },
           create: {
@@ -315,6 +313,7 @@ export const clientsRouter = router({
             isActive: net.isActive,
           },
           update: {
+            pageId: pageId,
             accountName: net.accountName,
             profilePic: net.profilePic,
             isActive: net.isActive,
@@ -634,18 +633,32 @@ export const clientsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Una o más páginas no son válidas" });
       }
 
-      // Create client social network entries
+      // Create client social network entries — unique on (clientId, network).
+      // If the client already has this network connected (directly or via agency), overwrite it.
       const results = await Promise.all(
         agencyPages.map((page) =>
           ctx.db.clientSocialNetwork.upsert({
             where: {
-              clientId_network_pageId: {
+              clientId_network: {
                 clientId: input.clientId,
                 network: page.network,
-                pageId: page.pageId || page.accountId,
               },
             },
-            update: { isActive: true, assignedAt: new Date() },
+            update: {
+              isActive: true,
+              assignedAt: new Date(),
+              pageId: page.pageId || page.accountId,
+              accountName: page.accountName,
+              profilePic: page.profilePic,
+              sourceType: "agency",
+              agencyAccountId: page.id,
+              accessToken: page.accessToken,
+              tokenExpiresAt: page.tokenExpiresAt,
+              accountId: page.accountId,
+              tokenScope: page.tokenScope,
+              tokenExpired: false,
+              tokenErrorMsg: null,
+            },
             create: {
               clientId: input.clientId,
               network: page.network,

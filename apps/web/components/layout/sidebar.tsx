@@ -46,6 +46,7 @@ import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { ThemeSwitcher } from "./theme-switcher";
 import { trpc } from "@/lib/trpc/client";
+import { ClientLogo } from "@/components/ui/client-logo";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -712,17 +713,7 @@ function ClientItem({
             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         )}
       >
-        {client.logoUrl ? (
-          <img
-            src={client.logoUrl}
-            alt={client.companyName}
-            className="w-7 h-7 rounded-full object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-            {getInitials(client.companyName)}
-          </div>
-        )}
+        <ClientLogo src={client.logoUrl} name={client.companyName} />
 
         <span className="flex-1 text-left truncate text-[13px] font-medium">
           {client.companyName}
@@ -1359,17 +1350,11 @@ function ClientPanelCollapsedInner({
             className="flex items-center justify-center w-8 h-8 rounded-full hover:ring-2 hover:ring-primary/30 transition-all"
             title={client.companyName}
           >
-            {client.logoUrl ? (
-              <img
-                src={client.logoUrl}
-                alt={client.companyName}
-                className="w-7 h-7 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary flex items-center justify-center text-[8px] font-bold">
-                {getInitials(client.companyName)}
-              </div>
-            )}
+            <ClientLogo
+              src={client.logoUrl}
+              name={client.companyName}
+              fallbackClassName="text-[8px]"
+            />
           </button>
         ))}
       </div>

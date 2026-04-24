@@ -388,7 +388,7 @@ model ClientSocialNetwork {
 
   publishLogs PostPublishLog[]
 
-  @@unique([clientId, network, pageId]) // Allow multiple pages per network
+  @@unique([clientId, network]) // One connection per (client, network) — pageId is overwritten on reconnect
   @@index([clientId])
   @@index([agencyAccountId])
   @@map("iso_client_social_networks")

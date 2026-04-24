@@ -1566,6 +1566,135 @@ export const postsRouter = router({
       return { mirrorGroupId, created: newPosts.length };
     }),
 
+  // ─── Duplicate a post across multiple clients ─────────────────────────────
+  // Creates independent Post copies for each target client. Media rows are
+  // duplicated (same fileUrl — no re-upload since buckets are public).
+  // Each new post starts in DRAFT status so the destination client can review.
+  // The target network on each new post is auto-selected: if the destination
+  // client has the same network as the source connected, use it; otherwise
+  // fall back to their first connected network.
+  duplicateToClients: adminOrPermissionProcedure("CREATE_POSTS")
+    .input(
+      z.object({
+        sourcePostId: z.string(),
+        targetClientIds: z.array(z.string()).min(1, "Selecciona al menos un cliente"),
+        keepScheduledAt: z.boolean().default(false),
+        initialStatus: z.enum(["DRAFT", "PENDING_REVIEW"]).default("DRAFT"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = getAgencyId(ctx);
+
+      const source = await ctx.db.post.findFirst({
+        where: { id: input.sourcePostId, agencyId },
+        include: { media: { orderBy: { sortOrder: "asc" } } },
+      });
+      if (!source) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Post fuente no encontrado" });
+      }
+
+      // Resolve target clients (must belong to same agency + be active)
+      const targetClients = await ctx.db.clientProfile.findMany({
+        where: {
+          id: { in: input.targetClientIds },
+          agencyId,
+          isActive: true,
+        },
+        include: {
+          socialNetworks: {
+            where: { isActive: true },
+            select: { network: true },
+            orderBy: { assignedAt: "desc" },
+          },
+        },
+      });
+
+      if (targetClients.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Ninguno de los clientes seleccionados es válido",
+        });
+      }
+
+      const results: { clientId: string; postId?: string; skipped?: string }[] = [];
+
+      for (const targetClient of targetClients) {
+        // Don't duplicate to the same client (use createMirror for that)
+        if (targetClient.id === source.clientId) {
+          results.push({ clientId: targetClient.id, skipped: "Es el cliente origen" });
+          continue;
+        }
+
+        // Pick a network for the new post: prefer matching the source's network,
+        // otherwise fall back to the client's first connected network.
+        const availableNetworks = [
+          ...new Set(targetClient.socialNetworks.map((sn) => sn.network)),
+        ];
+        if (availableNetworks.length === 0) {
+          results.push({ clientId: targetClient.id, skipped: "Sin redes conectadas" });
+          continue;
+        }
+        const targetNetwork = availableNetworks.includes(source.network)
+          ? source.network
+          : availableNetworks[0];
+
+        // Create the duplicated Post
+        const newPost = await ctx.db.post.create({
+          data: {
+            agencyId,
+            clientId: targetClient.id,
+            editorId: ctx.session.user.id,
+            network: targetNetwork,
+            postType: source.postType,
+            title: source.title,
+            copy: source.copy,
+            hashtags: source.hashtags,
+            scheduledAt: input.keepScheduledAt ? source.scheduledAt : null,
+            revisionsLimit: source.revisionsLimit,
+            referenceLink: source.referenceLink,
+            // Note: categoryId is not copied because categories are per-client.
+            status: input.initialStatus,
+          },
+        });
+
+        // Duplicate media rows — fileUrl is reused (public bucket).
+        if (source.media.length > 0) {
+          await ctx.db.postMedia.createMany({
+            data: source.media.map((m) => ({
+              postId: newPost.id,
+              fileName: m.fileName,
+              fileUrl: m.fileUrl,
+              storagePath: m.storagePath,
+              mimeType: m.mimeType,
+              fileSize: m.fileSize,
+              sortOrder: m.sortOrder,
+            })),
+          });
+        }
+
+        // Audit log with traceability back to the source post
+        await ctx.db.postStatusLog.create({
+          data: {
+            postId: newPost.id,
+            toStatus: input.initialStatus,
+            changedById: ctx.session.user.id,
+            note: `Duplicado desde post ${source.id} (cliente origen: ${source.clientId})`,
+          },
+        });
+
+        results.push({ clientId: targetClient.id, postId: newPost.id });
+      }
+
+      const created = results.filter((r) => r.postId).length;
+      const skipped = results.filter((r) => r.skipped).length;
+
+      return {
+        created,
+        skipped,
+        results,
+      };
+    }),
+
   getMirrorGroup: protectedProcedure
     .input(z.object({ mirrorGroupId: z.string() }))
     .query(async ({ ctx, input }) => {
