@@ -66,6 +66,12 @@ interface IdeaDetailProps {
   canUploadMedia?: boolean;
 }
 
+// Build "yyyy-MM-dd" from LOCAL date components — toISOString() is UTC and
+// shifts the day in negative-offset zones at certain hours.
+function toLocalDateInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canDelete = false, canUploadMedia = false }: IdeaDetailProps) {
   const params = useParams();
@@ -194,7 +200,9 @@ export function IdeaDetail({ basePath, canEdit = false, canConvert = false, canD
     setEditCopyIdeas(idea.copyIdeas || "");
     setEditNetwork(idea.network || "");
     setEditPostType(idea.postType || "");
-    setEditTentativeDate(idea.tentativeDate ? new Date(idea.tentativeDate).toISOString().split("T")[0] : "");
+    // Use LOCAL date components (not toISOString which is UTC) so the date
+    // input shows the same day the user originally picked.
+    setEditTentativeDate(idea.tentativeDate ? toLocalDateInputValue(new Date(idea.tentativeDate)) : "");
     setIsEditing(true);
   };
 

@@ -49,6 +49,14 @@ function getFirstDayOfMonth(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 }
 
+// Format a Date as "yyyy-MM-dd" in LOCAL time, not UTC. Using toISOString()
+// here would shift the day for users west of UTC (e.g. CDMX at 23:00 local
+// reads as the next UTC day).
+function toLocalDateInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function CalendarScheduler({
   value,
   onChange,
@@ -382,17 +390,22 @@ export function CalendarScheduler({
                 <Label className="text-[11px] font-medium">Hasta cuándo (opcional)</Label>
                 <input
                   type="date"
-                  value={repeatEndDate ? repeatEndDate.toISOString().split("T")[0] : ""}
+                  value={repeatEndDate ? toLocalDateInputValue(repeatEndDate) : ""}
                   onChange={(e) => {
                     if (e.target.value) {
-                      const d = new Date(e.target.value);
-                      d.setHours(23, 59, 59, 0);
+                      // `<input type="date">` emits "yyyy-MM-dd". Parsing that
+                      // through `new Date(str)` yields midnight UTC, which
+                      // shifts to the previous day in negative-offset zones.
+                      // Build a local-midnight Date instead, then bump to
+                      // 23:59 local for "end of day" semantics.
+                      const [y, m, day] = e.target.value.split("-").map(Number);
+                      const d = new Date(y, m - 1, day, 23, 59, 59, 0);
                       setRepeatEndDate(d);
                     } else {
                       setRepeatEndDate(undefined);
                     }
                   }}
-                  min={new Date().toISOString().split("T")[0]}
+                  min={toLocalDateInputValue(new Date())}
                   className="w-full h-9 px-3 rounded border bg-background text-sm"
                 />
               </div>

@@ -7,6 +7,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Topbar } from "@/components/layout/topbar";
 import type { MockupMedia } from "@/components/mockups/types";
 
+// Format a Date as "yyyy-MM-ddTHH:mm" in LOCAL time. Using toISOString().slice(0, 16)
+// formats in UTC, which displays the wrong day/hour in the datetime-local input.
+function toLocalDatetimeString(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
 export default function EditPostPage() {
   const params = useParams();
   const postId = params.id as string;
@@ -54,7 +64,7 @@ export default function EditPostPage() {
     hashtags: post.hashtags ?? "",
     purpose: post.purpose ?? "",
     scheduledAt: post.scheduledAt
-      ? new Date(post.scheduledAt).toISOString().slice(0, 16)
+      ? toLocalDatetimeString(new Date(post.scheduledAt))
       : "",
     revisionsLimit: post.revisionsLimit ?? 3,
     referenceLink: post.referenceLink ?? "",

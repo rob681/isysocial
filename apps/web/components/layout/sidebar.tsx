@@ -857,7 +857,9 @@ function ClientPanelInner({
   const searchParams = useSearchParams();
   const activeClientId = searchParams.get("clientId");
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Accordion behavior: at most ONE group expanded at a time. `null` means
+  // all groups are collapsed (the default state on first render).
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Group creation state
@@ -922,17 +924,14 @@ function ClientPanelInner({
     }
   };
 
-  // Auto-expand client from URL
+  // Auto-expand client from URL — and the group it lives in (accordion
+  // collapses any other group that might be open).
   useEffect(() => {
     if (activeClientId && activeClientId !== expandedClient) {
       setExpandedClient(activeClientId);
       const client = clients?.find((c) => c.id === activeClientId);
       if (client?.groupId) {
-        setCollapsedGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(client.groupId!);
-          return next;
-        });
+        setExpandedGroupId(client.groupId);
       }
     }
   }, [activeClientId, clients]);
@@ -948,16 +947,10 @@ function ClientPanelInner({
     setExpandedClient((prev) => (prev === id ? null : id));
   };
 
+  // Accordion toggle: opening a group collapses any other open group.
+  // Clicking the currently-open group collapses it again.
   const toggleGroup = (groupId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
+    setExpandedGroupId((prev) => (prev === groupId ? null : groupId));
   };
 
   const handleCreateGroup = () => {
@@ -1050,7 +1043,9 @@ function ClientPanelInner({
         {/* Grouped clients (folders) */}
         {sortedGroups.map((group) => {
           const groupClients = groupedClients.get(group.id) ?? [];
-          const isGroupCollapsed = collapsedGroups.has(group.id);
+          // Default = collapsed. A group is expanded only if it's the
+          // currently-open accordion entry.
+          const isGroupCollapsed = expandedGroupId !== group.id;
           const hasActiveInGroup = groupClients.some((c) =>
             clientSubItems.some(
               (sub) => pathname.includes(`/${sub.segment}`) && activeClientId === c.id
@@ -1397,7 +1392,9 @@ function MobileClientListInner({
   const searchParams = useSearchParams();
   const activeClientId = searchParams.get("clientId");
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Accordion behavior: at most ONE group expanded at a time. `null` means
+  // all groups are collapsed (the default state on first render).
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 
   // Group creation state
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -1461,16 +1458,14 @@ function MobileClientListInner({
     }
   };
 
+  // Auto-expand client from URL — and the group it lives in (accordion
+  // collapses any other group that might be open).
   useEffect(() => {
     if (activeClientId && activeClientId !== expandedClient) {
       setExpandedClient(activeClientId);
       const client = clients?.find((c) => c.id === activeClientId);
       if (client?.groupId) {
-        setCollapsedGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(client.groupId!);
-          return next;
-        });
+        setExpandedGroupId(client.groupId);
       }
     }
   }, [activeClientId, clients]);
@@ -1485,13 +1480,10 @@ function MobileClientListInner({
     setExpandedClient((prev) => (prev === id ? null : id));
   };
 
+  // Accordion toggle: opening a group collapses any other open group.
+  // Clicking the currently-open group collapses it again.
   const toggleGroup = (groupId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
+    setExpandedGroupId((prev) => (prev === groupId ? null : groupId));
   };
 
   const handleCreateGroup = () => {
@@ -1544,7 +1536,9 @@ function MobileClientListInner({
 
         {sortedGroups.map((group) => {
           const groupClients = groupedClients.get(group.id) ?? [];
-          const isGroupCollapsed = collapsedGroups.has(group.id);
+          // Default = collapsed. A group is expanded only if it's the
+          // currently-open accordion entry.
+          const isGroupCollapsed = expandedGroupId !== group.id;
           const hasActiveInGroup = groupClients.some((c) =>
             clientSubItems.some(
               (sub) => pathname.includes(`/${sub.segment}`) && activeClientId === c.id

@@ -861,9 +861,16 @@ export function PostEditor({ postId, defaultValues, defaultMedia, existingMedia:
         <CalendarScheduler
           value={watchedValues.scheduledAt ? new Date(watchedValues.scheduledAt) : undefined}
           onChange={(date) => {
-            // Convert Date to ISO string format for form
-            const isoString = date.toISOString().split('T')[0] + 'T' + String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
-            form.setValue("scheduledAt", isoString);
+            // Build a LOCAL "datetime-local"-style string (yyyy-MM-ddTHH:mm).
+            // BUG: previous version used `date.toISOString().split('T')[0]` for
+            // the date part, which gave the UTC date — for users west of UTC
+            // any time in the late evening rolled into the next calendar day,
+            // shifting the saved scheduledAt by +1 day.
+            const pad = (n: number) => String(n).padStart(2, "0");
+            const localString =
+              `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+              `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+            form.setValue("scheduledAt", localString);
           }}
           onClose={() => setShowCalendarScheduler(false)}
         />
