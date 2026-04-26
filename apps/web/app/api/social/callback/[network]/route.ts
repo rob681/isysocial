@@ -6,37 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@isysocial/db";
-import { uploadFile, getPublicUrlFromPath } from "@isysocial/api/src/lib/supabase-storage";
+import { cacheProfilePic } from "@isysocial/api/src/lib/cache-profile-pic";
 
 type NetworkKey = "facebook" | "instagram" | "linkedin" | "x" | "tiktok";
-
-/**
- * Downloads a profile picture from a remote URL and caches it in Supabase Storage.
- * Returns a PERMANENT public URL (bucket must be public), or the original URL if caching fails.
- *
- * Previously this used a 24-hour signed URL which caused avatars to break
- * the next day. The bucket `isysocial-media` is public, so we can use
- * `getPublicUrl` which never expires.
- */
-async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
-  try {
-    const res = await fetch(remoteUrl);
-    if (!res.ok) return remoteUrl;
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
-    // Add a cache-buster so a refreshed avatar invalidates the CDN copy.
-    const path = `client-logos/${clientId}/${network}.${ext}`;
-    const { storagePath } = await uploadFile("isysocial-media", path, buffer, contentType);
-    // Permanent public URL — never expires.
-    // Append a version param (timestamp) so browsers + Supabase CDN
-    // immediately serve the new image when the avatar is refreshed.
-    return `${getPublicUrlFromPath(storagePath)}?v=${Date.now()}`;
-  } catch (err) {
-    console.warn("[cacheProfilePic] Failed to cache, using original URL:", err);
-    return remoteUrl;
-  }
-}
 
 const REDIRECT_BASE = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim();
 

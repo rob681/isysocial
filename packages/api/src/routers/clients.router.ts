@@ -5,6 +5,7 @@ import { createClientSchema, updateClientSchema, updateBrandKitSchema } from "@i
 import { createToken } from "../lib/tokens";
 import { sendEmailNotification } from "../lib/email";
 import { refreshTikTokToken, isTikTokTokenExpired } from "../lib/tiktok-token";
+import { cacheProfilePic } from "../lib/cache-profile-pic";
 
 export const clientsRouter = router({
   list: protectedProcedure
@@ -1117,11 +1118,34 @@ export const clientsRouter = router({
         tokenValid = false;
       }
 
+      // If the network returned a fresh profile picture URL that differs from
+      // the stored one, re-cache it in Supabase. The remote URL points to the
+      // platform CDN (Meta / LinkedIn / TikTok) and expires after days/weeks.
+      // Without this, the avatar would silently break on the next refresh —
+      // exactly what we just fixed in createClientSocialNetwork.
+      //
+      // Skip the round-trip when:
+      //   - the network call failed (profilePic === record.profilePic)
+      //   - the new URL is already a Supabase URL (caching it again is a noop)
+      let finalProfilePic = profilePic;
+      if (
+        tokenValid &&
+        profilePic &&
+        profilePic !== record.profilePic &&
+        !profilePic.includes("/storage/v1/object/public/")
+      ) {
+        finalProfilePic = await cacheProfilePic(
+          profilePic,
+          input.clientId,
+          input.network
+        );
+      }
+
       await ctx.db.clientSocialNetwork.updateMany({
         where: { clientId: input.clientId, network: input.network as any, pageId: input.pageId },
         data: {
           accountName: accountName ?? undefined,
-          profilePic: profilePic ?? undefined,
+          profilePic: finalProfilePic ?? undefined,
           isActive: tokenValid,
           ...(refreshedAccessToken ? { accessToken: refreshedAccessToken } : {}),
           ...(refreshedRefreshToken ? { refreshToken: refreshedRefreshToken } : {}),
@@ -1129,6 +1153,6 @@ export const clientsRouter = router({
         },
       });
 
-      return { tokenValid, accountName, profilePic };
+      return { tokenValid, accountName, profilePic: finalProfilePic };
     }),
 });

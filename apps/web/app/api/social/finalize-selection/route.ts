@@ -3,24 +3,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
-import { uploadFile, getSignedUrl } from "@isysocial/api/src/lib/supabase-storage";
-
-async function cacheProfilePic(remoteUrl: string, clientId: string, network: string): Promise<string> {
-  try {
-    const res = await fetch(remoteUrl);
-    if (!res.ok) return remoteUrl;
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
-    const path = `client-logos/${clientId}/${network}.${ext}`;
-    const { storagePath } = await uploadFile("isysocial-media", path, buffer, contentType);
-    // Return a long-lived signed URL (24h) for profile pictures stored in DB
-    const signedUrl = await getSignedUrl(storagePath, 86400);
-    return signedUrl;
-  } catch {
-    return remoteUrl;
-  }
-}
+import { cacheProfilePic } from "@isysocial/api/src/lib/cache-profile-pic";
+// Note: this file previously had its own copy of cacheProfilePic that
+// returned a 24-hour signed URL — which was the root cause of avatars
+// disappearing the day after a network was linked. The shared helper now
+// returns a permanent public URL, so the bug is fixed at the source.
 
 const networkEnumMap: Record<string, string> = {
   facebook: "FACEBOOK",
