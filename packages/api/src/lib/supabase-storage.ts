@@ -86,6 +86,30 @@ export function getPublicUrlFromPath(storagePath: string): string {
 }
 
 /**
+ * Returns the always-fresh public URL for a piece of post media. Prefers
+ * `storagePath` (which we control and which yields a permanent URL on every
+ * call) over the stored `fileUrl` — `fileUrl` may be a stale 1-hour signed
+ * URL persisted by the legacy upload route, which would cause platforms
+ * like Meta to reject the publish with "Missing or invalid image file".
+ *
+ * Falls back to `fileUrl` only when `storagePath` is missing (e.g. legacy
+ * rows imported from another source).
+ */
+export function getPublishableMediaUrl(media: {
+  fileUrl: string;
+  storagePath?: string | null;
+}): string {
+  if (media.storagePath) {
+    try {
+      return getPublicUrlFromPath(media.storagePath);
+    } catch {
+      // Malformed storagePath — fall through to whatever we have stored.
+    }
+  }
+  return media.fileUrl;
+}
+
+/**
  * Generate a signed download URL for a stored file.
  * Useful as fallback when the bucket is not set to public.
  * WARNING: URLs expire after expiresIn seconds (default 1 hour)

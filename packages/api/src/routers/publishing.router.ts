@@ -13,6 +13,7 @@ import { publishToNetwork } from "../lib/publishers/index";
 import type { SocialNetwork } from "@isysocial/db";
 import { broadcastEvent } from "../lib/realtime-events";
 import { refreshTikTokToken, isTikTokTokenExpired } from "../lib/tiktok-token";
+import { getPublishableMediaUrl } from "../lib/supabase-storage";
 
 export const publishingRouter = router({
   // ─── Get network connection status for a client ───────────────────────────
@@ -176,7 +177,7 @@ export const publishingRouter = router({
         });
       }
 
-      const mediaUrls = post.media.map((m) => m.fileUrl);
+      const mediaUrls = post.media.map((m) => getPublishableMediaUrl(m));
       const results: {
         networkId: string;
         network: string;
@@ -490,7 +491,7 @@ export const publishingRouter = router({
         data: { status: "PENDING", errorMessage: null, attemptedAt: new Date() },
       });
 
-      const mediaUrls = log.post.media.map((m) => m.fileUrl);
+      const mediaUrls = log.post.media.map((m) => getPublishableMediaUrl(m));
 
       // ── TikTok: auto-refresh access token if expired ──────────────────────
       let retryAccessToken = sn.accessToken;
@@ -719,7 +720,7 @@ export const publishingRouter = router({
             },
           });
 
-          const mediaUrls = post.media.map((m) => m.fileUrl);
+          const mediaUrls = post.media.map((m) => getPublishableMediaUrl(m));
 
           // ── TikTok: auto-refresh access token if expired ──────────────────
           let batchClientAccessToken = sn.accessToken!;
@@ -810,7 +811,7 @@ export const publishingRouter = router({
             },
           });
 
-          const mediaUrls = post.media.map((m) => m.fileUrl);
+          const mediaUrls = post.media.map((m) => getPublishableMediaUrl(m));
 
           // ── TikTok: auto-refresh access token if expired ──────────────────
           let batchAgencyAccessToken = sn.accessToken;

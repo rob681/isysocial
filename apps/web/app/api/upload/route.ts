@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { uploadFile, getSignedUrl, ensureBucketExists } from "@isysocial/api/src/lib/supabase-storage";
+import { uploadFile, getPublicUrlFromPath, ensureBucketExists } from "@isysocial/api/src/lib/supabase-storage";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const ALLOWED_TYPES = [
@@ -56,11 +56,21 @@ export async function POST(req: NextRequest) {
 
     const { storagePath } = await uploadFile(bucket, path, buffer, file.type);
 
-    // Generate a 1-hour signed URL for immediate display
-    const signedUrl = await getSignedUrl(storagePath, 3600);
+    // CRITICAL: return a PERMANENT public URL, not a 1-hour signed URL.
+    //
+    // History: this used to return `getSignedUrl(storagePath, 3600)`. That
+    // URL was stored verbatim into `iso_post_media.fileUrl` and later sent
+    // to Meta/LinkedIn/etc. when the post was published. As soon as the
+    // hour elapsed (e.g. a scheduled post publishing the next morning), the
+    // platform fetched the URL, got a Supabase 401, and returned errors
+    // like "Missing or invalid image file" — cron retries every 5 min
+    // never recovered because the stored URL stayed dead. The
+    // `isysocial-media` bucket is public, so a public URL is correct AND
+    // never expires.
+    const publicUrl = getPublicUrlFromPath(storagePath);
 
     return NextResponse.json({
-      url: signedUrl,
+      url: publicUrl,
       storagePath,
       fileName: file.name,
       fileSize: file.size,

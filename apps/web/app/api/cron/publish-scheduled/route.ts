@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@isysocial/db";
 import { publishToNetwork } from "@isysocial/api";
+import { getPublishableMediaUrl } from "@isysocial/api/src/lib/supabase-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,7 +125,10 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const mediaUrls = post.media.map((m) => m.fileUrl);
+    // Use the always-fresh public URL derived from storagePath. Avoids the
+    // 1-hour-signed-URL trap that left old posts forever-failing with
+    // "Missing or invalid image file".
+    const mediaUrls = post.media.map((m) => getPublishableMediaUrl(m));
 
     const publishResult = await publishToNetwork({
       network: sn.network,
